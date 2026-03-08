@@ -1,0 +1,23 @@
+# Virtual Environments
+.venv/
+venv/
+env/
+faiss_json_agent/.venv/
+**/venv/
+**/.venv/
+
+# Node modules
+node_modules/
+**/node_modules/
+
+# Python
+__pycache__/
+**/__pycache__/
+*.py[cod]
+
+# Database
+*.sqlite
+*.db
+
+# Logs
+*.log

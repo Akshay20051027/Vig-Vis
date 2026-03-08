@@ -1,0 +1,644 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Campus Map Coordinate Picker</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+      color: white;
+      padding: 20px;
+      min-height: 100vh;
+    }
+
+    .container {
+      max-width: 1400px;
+      margin: 0 auto;
+    }
+
+    h1 {
+      text-align: center;
+      color: #ffc107;
+      margin-bottom: 10px;
+      font-size: 32px;
+      text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+    }
+
+    .instructions {
+      background: rgba(255, 193, 7, 0.1);
+      border: 2px solid rgba(255, 193, 7, 0.3);
+      border-radius: 10px;
+      padding: 15px;
+      margin-bottom: 20px;
+      font-size: 14px;
+    }
+
+    .instructions h3 {
+      color: #ffc107;
+      margin-bottom: 10px;
+    }
+
+    .instructions ul {
+      margin-left: 20px;
+    }
+
+    .instructions li {
+      margin: 5px 0;
+    }
+
+    .main-content {
+      display: grid;
+      grid-template-columns: 1fr 400px;
+      gap: 20px;
+    }
+
+    .map-section {
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 10px;
+      padding: 20px;
+      border: 2px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .controls {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 15px;
+      flex-wrap: wrap;
+    }
+
+    .btn {
+      padding: 10px 20px;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      font-weight: bold;
+      font-size: 14px;
+      transition: all 0.3s ease;
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+    }
+
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+    }
+
+    .btn-secondary {
+      background: rgba(255, 193, 7, 0.8);
+      color: #1a1a2e;
+    }
+
+    .btn-secondary:hover {
+      background: rgba(255, 193, 7, 1);
+    }
+
+    .btn-danger {
+      background: rgba(255, 82, 82, 0.8);
+      color: white;
+    }
+
+    .btn-danger:hover {
+      background: rgba(255, 82, 82, 1);
+    }
+
+    .btn.active {
+      box-shadow: 0 0 20px rgba(255, 193, 7, 0.8);
+      border: 2px solid #ffc107;
+    }
+
+    .canvas-container {
+      position: relative;
+      width: 100%;
+      height: 70vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      background: #16213e;
+      border-radius: 5px;
+    }
+
+    #mapCanvas {
+      display: block;
+      cursor: crosshair;
+      max-width: 90%;
+      max-height: 90%;
+      object-fit: contain;
+    }
+
+    .sidebar {
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 10px;
+      padding: 20px;
+      border: 2px solid rgba(255, 255, 255, 0.1);
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    .input-group {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .input-group label {
+      font-weight: bold;
+      color: #ffc107;
+      font-size: 14px;
+    }
+
+    .input-group input {
+      padding: 10px;
+      border: 2px solid rgba(255, 255, 255, 0.2);
+      border-radius: 5px;
+      background: rgba(0, 0, 0, 0.3);
+      color: white;
+      font-size: 14px;
+    }
+
+    .input-group input:focus {
+      outline: none;
+      border-color: #ffc107;
+    }
+
+    .output-section {
+      background: rgba(0, 0, 0, 0.3);
+      border: 2px solid rgba(255, 193, 7, 0.3);
+      border-radius: 5px;
+      padding: 15px;
+    }
+
+    .output-section h3 {
+      color: #ffc107;
+      margin-bottom: 10px;
+      font-size: 16px;
+    }
+
+    .json-output {
+      background: #0f0f0f;
+      padding: 15px;
+      border-radius: 5px;
+      font-family: 'Courier New', monospace;
+      font-size: 12px;
+      overflow-x: auto;
+      max-height: 300px;
+      overflow-y: auto;
+      white-space: pre;
+      color: #00ff00;
+    }
+
+    .blocks-list {
+      max-height: 400px;
+      overflow-y: auto;
+    }
+
+    .block-item {
+      background: rgba(102, 126, 234, 0.2);
+      padding: 10px;
+      border-radius: 5px;
+      margin-bottom: 10px;
+      border: 1px solid rgba(102, 126, 234, 0.4);
+      position: relative;
+    }
+
+    .block-item h4 {
+      color: #ffc107;
+      margin-bottom: 5px;
+      font-size: 14px;
+    }
+
+    .block-item p {
+      font-size: 11px;
+      color: #ccc;
+      margin: 2px 0;
+    }
+
+    .delete-btn {
+      position: absolute;
+      top: 5px;
+      right: 5px;
+      background: rgba(255, 82, 82, 0.8);
+      color: white;
+      border: none;
+      border-radius: 3px;
+      padding: 3px 8px;
+      cursor: pointer;
+      font-size: 11px;
+    }
+
+    .delete-btn:hover {
+      background: rgba(255, 82, 82, 1);
+    }
+
+    .mode-indicator {
+      background: rgba(255, 193, 7, 0.2);
+      border: 2px solid rgba(255, 193, 7, 0.5);
+      padding: 10px;
+      border-radius: 5px;
+      text-align: center;
+      font-weight: bold;
+      color: #ffc107;
+    }
+
+    @media (max-width: 1200px) {
+      .main-content {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🗺️ Campus Map Coordinate Picker</h1>
+    
+    <div class="instructions">
+      <h3>📋 How to Use:</h3>
+      <ul>
+        <li><strong>Click Mode:</strong> Click anywhere on the map to get coordinates (x, y)</li>
+        <li><strong>Draw Mode:</strong> Click and drag to draw a rectangle over a building</li>
+        <li>Enter the block name in the sidebar</li>
+        <li>Click "Add Block" to save it to the list</li>
+        <li>When done, copy all the JSON data and paste it into your seed.js file</li>
+      </ul>
+    </div>
+
+    <div class="main-content">
+      <!-- Map Section -->
+      <div class="map-section">
+        <div class="controls">
+          <button id="clickModeBtn" class="btn btn-primary active" onclick="setMode('click')">
+            👆 Click Mode
+          </button>
+          <button id="drawModeBtn" class="btn btn-primary" onclick="setMode('draw')">
+            ✏️ Draw Rectangle
+          </button>
+          <button class="btn btn-secondary" onclick="loadMapImage()">
+            📂 Select Map Image
+          </button>
+          <button class="btn btn-danger" onclick="clearCanvas()">
+            🗑️ Clear Canvas
+          </button>
+        </div>
+
+        <div class="mode-indicator" id="modeIndicator">
+          Mode: Click to Get Coordinates
+        </div>
+
+        <div class="canvas-container" style="margin-top: 15px;">
+          <canvas id="mapCanvas"></canvas>
+        </div>
+
+        <input type="file" id="fileInput" accept="image/*" style="display: none;" onchange="handleFileSelect(event)">
+      </div>
+
+      <!-- Sidebar -->
+      <div class="sidebar">
+        <div class="input-group">
+          <label>Block Name (e.g., a-block, b-block):</label>
+          <input type="text" id="blockName" placeholder="a-block" value="">
+        </div>
+
+        <div class="input-group">
+          <label>Display Name:</label>
+          <input type="text" id="displayName" placeholder="A Block" value="">
+        </div>
+
+        <div class="input-group">
+          <label>Image Path:</label>
+          <input type="text" id="imagePath" placeholder="/public/a-block/ablock.jpg" value="">
+        </div>
+
+        <div class="output-section">
+          <h3>Current Coordinates:</h3>
+          <div class="json-output" id="coordsOutput">Click on map or draw rectangle...</div>
+        </div>
+
+        <button class="btn btn-primary" onclick="addBlock()" style="width: 100%;">
+          ➕ Add Block to List
+        </button>
+
+        <div class="output-section">
+          <h3>All Blocks ({<span id="blockCount">0</span>}):</h3>
+          <div class="blocks-list" id="blocksList"></div>
+        </div>
+
+        <button class="btn btn-secondary" onclick="copyAllBlocks()" style="width: 100%;">
+          📋 Copy All JSON
+        </button>
+
+        <button class="btn btn-danger" onclick="clearAllBlocks()" style="width: 100%;">
+          🗑️ Clear All Blocks
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Global state
+    let mode = 'click'; // 'click' or 'draw'
+    let canvas, ctx;
+    let img = new Image();
+    let isDrawing = false;
+    let startX, startY, endX, endY;
+    let blocks = [];
+    let currentCoords = null;
+
+    // Initialize
+    window.onload = function() {
+      canvas = document.getElementById('mapCanvas');
+      ctx = canvas.getContext('2d');
+
+      // Load default map image
+      img.src = '../public/map.jpeg';
+      img.onload = function() {
+        setupCanvas();
+        drawImage();
+      };
+
+      // Canvas event listeners
+      canvas.addEventListener('mousedown', handleMouseDown);
+      canvas.addEventListener('mousemove', handleMouseMove);
+      canvas.addEventListener('mouseup', handleMouseUp);
+    };
+
+    function setupCanvas() {
+      // Match the exact scaling from the main website
+      // Map image uses max-width: 90%, max-height: 90vh in a container
+      const container = canvas.parentElement;
+      const containerWidth = container.clientWidth * 0.9;
+      const containerHeight = container.clientHeight * 0.9;
+      
+      // Calculate scale to fit within container while maintaining aspect ratio
+      const scaleX = containerWidth / img.width;
+      const scaleY = containerHeight / img.height;
+      const scale = Math.min(scaleX, scaleY);
+      
+      canvas.width = img.width * scale;
+      canvas.height = img.height * scale;
+    }
+
+    function drawImage() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    }
+
+    function setMode(newMode) {
+      mode = newMode;
+      
+      // Update buttons
+      document.getElementById('clickModeBtn').classList.toggle('active', mode === 'click');
+      document.getElementById('drawModeBtn').classList.toggle('active', mode === 'draw');
+      
+      // Update indicator
+      const indicator = document.getElementById('modeIndicator');
+      if (mode === 'click') {
+        indicator.textContent = 'Mode: Click to Get Coordinates';
+        canvas.style.cursor = 'crosshair';
+      } else {
+        indicator.textContent = 'Mode: Draw Rectangle (Click & Drag)';
+        canvas.style.cursor = 'crosshair';
+      }
+    }
+
+    function handleMouseDown(e) {
+      const rect = canvas.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+
+      if (mode === 'click') {
+        // Calculate percentage coordinates
+        const xPercent = (x / canvas.width) * 100;
+        const yPercent = (y / canvas.height) * 100;
+
+        currentCoords = {
+          x: parseFloat(xPercent.toFixed(2)),
+          y: parseFloat(yPercent.toFixed(2)),
+          width: 8,
+          height: 12
+        };
+
+        displayCoordinates();
+
+        // Draw a marker
+        drawImage();
+        ctx.fillStyle = 'rgba(255, 193, 7, 0.5)';
+        ctx.strokeStyle = 'rgba(255, 193, 7, 1)';
+        ctx.lineWidth = 3;
+        
+        const markerX = (currentCoords.x / 100) * canvas.width;
+        const markerY = (currentCoords.y / 100) * canvas.height;
+        const markerW = (currentCoords.width / 100) * canvas.width;
+        const markerH = (currentCoords.height / 100) * canvas.height;
+        
+        ctx.fillRect(markerX, markerY, markerW, markerH);
+        ctx.strokeRect(markerX, markerY, markerW, markerH);
+
+      } else if (mode === 'draw') {
+        isDrawing = true;
+        startX = x;
+        startY = y;
+      }
+    }
+
+    function handleMouseMove(e) {
+      if (!isDrawing || mode !== 'draw') return;
+
+      const rect = canvas.getBoundingClientRect();
+      endX = e.clientX - rect.left;
+      endY = e.clientY - rect.top;
+
+      // Redraw
+      drawImage();
+      
+      // Draw rectangle
+      ctx.fillStyle = 'rgba(255, 193, 7, 0.3)';
+      ctx.strokeStyle = 'rgba(255, 193, 7, 1)';
+      ctx.lineWidth = 3;
+      
+      const width = endX - startX;
+      const height = endY - startY;
+      
+      ctx.fillRect(startX, startY, width, height);
+      ctx.strokeRect(startX, startY, width, height);
+    }
+
+    function handleMouseUp(e) {
+      if (!isDrawing || mode !== 'draw') return;
+      
+      isDrawing = false;
+      
+      const rect = canvas.getBoundingClientRect();
+      endX = e.clientX - rect.left;
+      endY = e.clientY - rect.top;
+
+      // Calculate percentage coordinates
+      const x1 = Math.min(startX, endX);
+      const y1 = Math.min(startY, endY);
+      const x2 = Math.max(startX, endX);
+      const y2 = Math.max(startY, endY);
+
+      const xPercent = (x1 / canvas.width) * 100;
+      const yPercent = (y1 / canvas.height) * 100;
+      const widthPercent = ((x2 - x1) / canvas.width) * 100;
+      const heightPercent = ((y2 - y1) / canvas.height) * 100;
+
+      currentCoords = {
+        x: parseFloat(xPercent.toFixed(2)),
+        y: parseFloat(yPercent.toFixed(2)),
+        width: parseFloat(widthPercent.toFixed(2)),
+        height: parseFloat(heightPercent.toFixed(2))
+      };
+
+      displayCoordinates();
+    }
+
+    function displayCoordinates() {
+      const output = document.getElementById('coordsOutput');
+      output.textContent = JSON.stringify(currentCoords, null, 2);
+    }
+
+    function addBlock() {
+      const blockName = document.getElementById('blockName').value.trim();
+      const displayName = document.getElementById('displayName').value.trim();
+      const imagePath = document.getElementById('imagePath').value.trim();
+
+      if (!blockName) {
+        alert('Please enter a block name!');
+        return;
+      }
+
+      if (!currentCoords) {
+        alert('Please select coordinates on the map first!');
+        return;
+      }
+
+      const block = {
+        name: blockName,
+        displayName: displayName || blockName.toUpperCase(),
+        image: imagePath || `/public/${blockName}/${blockName}.jpg`,
+        coordinates: currentCoords,
+        sections: [
+          {
+            name: 'labs',
+            displayName: 'Labs',
+            video: `/public/${blockName}/labs/video.mp4`
+          },
+          {
+            name: 'classrooms',
+            displayName: 'Classrooms',
+            video: `/public/${blockName}/classrooms/video.mp4`
+          }
+        ]
+      };
+
+      blocks.push(block);
+      updateBlocksList();
+      
+      // Clear inputs
+      document.getElementById('blockName').value = '';
+      document.getElementById('displayName').value = '';
+      document.getElementById('imagePath').value = '';
+      currentCoords = null;
+      document.getElementById('coordsOutput').textContent = 'Click on map or draw rectangle...';
+      
+      alert(`✅ Block "${blockName}" added successfully!`);
+    }
+
+    function updateBlocksList() {
+      const blocksList = document.getElementById('blocksList');
+      const blockCount = document.getElementById('blockCount');
+      
+      blockCount.textContent = blocks.length;
+
+      if (blocks.length === 0) {
+        blocksList.innerHTML = '<p style="color: #666; text-align: center; padding: 20px;">No blocks added yet</p>';
+        return;
+      }
+
+      blocksList.innerHTML = blocks.map((block, index) => `
+        <div class="block-item">
+          <button class="delete-btn" onclick="deleteBlock(${index})">✕</button>
+          <h4>${block.displayName}</h4>
+          <p>Name: ${block.name}</p>
+          <p>Coords: x=${block.coordinates.x}%, y=${block.coordinates.y}%</p>
+          <p>Size: ${block.coordinates.width}% × ${block.coordinates.height}%</p>
+        </div>
+      `).join('');
+    }
+
+    function deleteBlock(index) {
+      if (confirm(`Delete block "${blocks[index].name}"?`)) {
+        blocks.splice(index, 1);
+        updateBlocksList();
+      }
+    }
+
+    function copyAllBlocks() {
+      if (blocks.length === 0) {
+        alert('No blocks to copy!');
+        return;
+      }
+
+      const json = JSON.stringify(blocks, null, 2);
+      
+      navigator.clipboard.writeText(json).then(() => {
+        alert('✅ All blocks copied to clipboard!\n\nYou can now paste this into your seed.js file.');
+      }).catch(err => {
+        // Fallback
+        const textarea = document.createElement('textarea');
+        textarea.value = json;
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
+        alert('✅ All blocks copied to clipboard!');
+      });
+    }
+
+    function clearAllBlocks() {
+      if (blocks.length === 0) return;
+      
+      if (confirm('Are you sure you want to clear all blocks?')) {
+        blocks = [];
+        updateBlocksList();
+      }
+    }
+
+    function loadMapImage() {
+      document.getElementById('fileInput').click();
+    }
+
+    function handleFileSelect(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        img.src = e.target.result;
+        img.onload = function() {
+          setupCanvas();
+          drawImage();
+        };
+      };
+      reader.readAsDataURL(file);
+    }
+
+    function clearCanvas() {
+      drawImage();
+      currentCoords = null;
+      document.getElementById('coordsOutput').textContent = 'Click on map or draw rectangle...';
+    }
+  </script>
+</body>
+</html>
