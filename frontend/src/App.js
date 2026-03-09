@@ -41,11 +41,10 @@ function AppContent() {
             <Routes>
               <Route path="/" element={<Navigate to="/home" replace />} />
               <Route path="/home" element={<Home />} />
-            <Route path="/assistant" element={<Navigate to="/home" replace />} />
-            <Route path="/login" element={<Login />} />
-            <Route path="/dashboard" element={<Dashboard />} />
-            <Route path="/block/:blockName" element={<BlockView />} />
-            <Route path="/block/:blockName/:section" element={<VideoPlayer />} />
+              <Route path="/login" element={<Login />} />
+              <Route path="/dashboard" element={<Dashboard />} />
+              <Route path="/block/:blockName" element={<BlockView />} />
+              <Route path="/block/:blockName/:section" element={<VideoPlayer />} />
           </Routes>
         </Suspense>
       </div>

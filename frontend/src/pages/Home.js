@@ -1,14 +1,10 @@
-import React, { useCallback, lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 
-const Lottie = lazy(() => import('lottie-react'));
-const Assistant = lazy(() => import('./Assistant'));
-
 const CACHE_KEYS = {
   blocks: 'home.blocks.v1',
-  mapLastUpdated: 'home.mapLastUpdated.v1',
-  robotAnimation: 'home.robotAnimation.v1'
+  mapLastUpdated: 'home.mapLastUpdated.v1'
 };
 
 function Home() {
@@ -19,14 +15,6 @@ function Home() {
       return raw ? JSON.parse(raw) : [];
     } catch {
       return [];
-    }
-  });
-  const [robotAnimation, setRobotAnimation] = useState(() => {
-    try {
-      const raw = sessionStorage.getItem(CACHE_KEYS.robotAnimation);
-      return raw ? JSON.parse(raw) : null;
-    } catch {
-      return null;
     }
   });
   const [isAdmin, setIsAdmin] = useState(false);
@@ -42,8 +30,6 @@ function Home() {
   });
 
   const [imageBounds, setImageBounds] = useState(null);
-
-  const [assistantOpen, setAssistantOpen] = useState(false);
   
   // Edit mode states
   const [editMode, setEditMode] = useState(false);
@@ -68,7 +54,6 @@ function Home() {
     setIsAdmin(!!token);
     
     fetchBlocks();
-    fetchRobotAnimation();
     checkMapUpdate();
     
     const tick = () => {
@@ -158,33 +143,6 @@ function Home() {
     }
   };
 
-  const fetchRobotAnimation = async () => {
-    if (robotAnimation) return;
-    const load = async () => {
-      try {
-        // Using a working free Lottie animation
-        const response = await fetch('https://assets2.lottiefiles.com/packages/lf20_vnikrcia.json');
-        const data = await response.json();
-        setRobotAnimation(data);
-        try {
-          sessionStorage.setItem(CACHE_KEYS.robotAnimation, JSON.stringify(data));
-        } catch {
-          // ignore
-        }
-      } catch (error) {
-        console.error('Error loading robot animation:', error);
-        // Just use emoji fallback
-      }
-    };
-
-    // Defer heavy JSON parsing until the browser is idle.
-    if (typeof window.requestIdleCallback === 'function') {
-      window.requestIdleCallback(() => load(), { timeout: 2500 });
-    } else {
-      setTimeout(() => load(), 900);
-    }
-  };
-
   const fetchBlocks = async () => {
     try {
       const response = await axios.get('/api/blocks');
@@ -202,10 +160,6 @@ function Home() {
 
   const handleBlockClick = (blockName) => {
     navigate(`/block/${blockName}`);
-  };
-
-  const handleAvatarClick = () => {
-    setAssistantOpen((prev) => !prev);
   };
   
   const handleMapImageLoad = () => {
@@ -577,38 +531,6 @@ function Home() {
             );
           })}
         </div>
-        
-        {/* Robot Avatar - Bottom Right */}
-        {!editMode && (
-          <div 
-            className="robot-avatar-container" 
-            onClick={handleAvatarClick}
-            title="Click to chat with AI Assistant!"
-          >
-            {robotAnimation ? (
-              <Suspense fallback={<div className="robot-emoji">🤖</div>}>
-                <Lottie 
-                  animationData={robotAnimation}
-                  loop={true}
-                  style={{ width: '120px', height: '120px' }}
-                />
-              </Suspense>
-            ) : (
-              <div className="robot-emoji">🤖</div>
-            )}
-          </div>
-        )}
-
-        {/* Embedded Assistant (no page navigation) */}
-        {assistantOpen && !editMode && (
-          <div className="assistant-widget-shell" onClick={() => setAssistantOpen(false)}>
-            <div className="assistant-widget" onClick={(e) => e.stopPropagation()}>
-              <Suspense fallback={null}>
-                <Assistant embedded onClose={() => setAssistantOpen(false)} />
-              </Suspense>
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );

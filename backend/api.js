@@ -6,7 +6,6 @@
  *
  * Base server:
  * - Node/Express: http://localhost:5000
- * - Python assistant (proxied by Node): http://localhost:5001
  */
 
 const API = {
@@ -21,14 +20,6 @@ const API = {
         'Serves /api/* JSON endpoints',
         'Serves static assets under /public/*',
         'In production, serves the built frontend from ../frontend/build',
-      ],
-    },
-    assistantService: {
-      name: 'Python Assistant Service',
-      baseUrl: 'http://localhost:5001',
-      notes: [
-        'The frontend talks to the assistant via Node proxy: /api/assistant/*',
-        'Do not call :5001 directly from the browser in production',
       ],
     },
   },
@@ -302,56 +293,6 @@ const API = {
         headers: { Authorization: 'Bearer <token>' },
         params: { id: '<mongoObjectId>' },
       },
-    },
-
-    // ---------------------------
-    // Assistant (Node proxy → Python)
-    // ---------------------------
-    {
-      group: 'Assistant',
-      method: 'GET',
-      path: '/api/assistant/status',
-      purpose: 'Health check for assistant service (proxied).',
-      request: { query: {}, body: null },
-    },
-    {
-      group: 'Assistant',
-      method: 'POST',
-      path: '/api/assistant/query',
-      purpose: 'Ask a question (text or voice transcript).',
-      request: {
-        query: { t: '(optional) cache-buster timestamp used by frontend' },
-        body: { question: 'fee structure', language: 'en-IN' },
-      },
-      responseNotes: [
-        'Typical fields: success, type, answer, translated_answer, options (for lab selection), query_type',
-      ],
-    },
-    {
-      group: 'Assistant',
-      method: 'POST',
-      path: '/api/assistant/tts',
-      purpose: 'Text-to-speech (returns audio/mpeg bytes).',
-      request: { body: { text: 'Hello', language: 'en-IN' } },
-      response: { contentType: 'audio/mpeg' },
-    },
-    {
-      group: 'Assistant',
-      method: 'GET',
-      path: '/api/assistant/greeting',
-      purpose: 'Assistant greeting (proxied). (Availability depends on the Python service implementation.)',
-    },
-    {
-      group: 'Assistant',
-      method: 'GET',
-      path: '/api/assistant/history',
-      purpose: 'Assistant history (proxied). (Availability depends on the Python service implementation.)',
-    },
-    {
-      group: 'Assistant',
-      method: 'GET',
-      path: '/api/assistant/languages',
-      purpose: 'Assistant supported languages (proxied). (Availability depends on the Python service implementation.)',
     },
 
     // ---------------------------
