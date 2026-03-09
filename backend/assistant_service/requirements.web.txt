@@ -1,0 +1,8 @@
+faiss-cpu
+sentence-transformers
+numpy
+deep-translator
+gTTS
+flask
+flask-cors
+requests

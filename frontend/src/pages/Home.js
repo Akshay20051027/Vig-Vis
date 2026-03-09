@@ -1,8 +1,9 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useCallback, lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import Lottie from 'lottie-react';
-import Assistant from './Assistant';
+
+const Lottie = lazy(() => import('lottie-react'));
+const Assistant = lazy(() => import('./Assistant'));
 
 const CACHE_KEYS = {
   blocks: 'home.blocks.v1',
@@ -39,7 +40,8 @@ function Home() {
       return 0;
     }
   });
-  const [, setLayoutTick] = useState(0);
+
+  const [imageBounds, setImageBounds] = useState(null);
 
   const [assistantOpen, setAssistantOpen] = useState(false);
   
@@ -52,9 +54,13 @@ function Home() {
   
   const imageRef = useRef(null);
   const containerRef = useRef(null);
+  const drawImageRectRef = useRef(null);
+  const drawRafRef = useRef(null);
+  const drawPendingPointRef = useRef(null);
 
   // Keep in sync with the <img> style below
   const MAP_OBJECT_FIT = 'cover';
+  const MAP_POLL_MS = 60000;
 
   useEffect(() => {
     // Check if user is logged in as admin
@@ -65,22 +71,69 @@ function Home() {
     fetchRobotAnimation();
     checkMapUpdate();
     
-    // Check for map updates every 10 seconds
-    const mapCheckInterval = setInterval(() => {
+    const tick = () => {
+      if (typeof document !== 'undefined' && document.hidden) return;
       checkMapUpdate();
-    }, 10000);
+    };
+
+    // Check for map updates (reduced frequency for better scalability)
+    const mapCheckInterval = setInterval(() => {
+      tick();
+    }, MAP_POLL_MS);
+
+    const onVisibility = () => {
+      if (typeof document !== 'undefined' && document.hidden) return;
+      tick();
+    };
+    document.addEventListener('visibilitychange', onVisibility);
     
-    return () => clearInterval(mapCheckInterval);
+    return () => {
+      clearInterval(mapCheckInterval);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+  }, []);
+
+  const computeImageBounds = useCallback(() => {
+    const img = imageRef.current;
+    if (!img) {
+      setImageBounds(null);
+      return;
+    }
+
+    const containerWidth = img.offsetWidth;
+    const containerHeight = img.offsetHeight;
+    const imgNaturalWidth = img.naturalWidth;
+    const imgNaturalHeight = img.naturalHeight;
+
+    if (!containerWidth || !containerHeight || !imgNaturalWidth || !imgNaturalHeight) {
+      setImageBounds(null);
+      return;
+    }
+
+    const scale = MAP_OBJECT_FIT === 'cover'
+      ? Math.max(containerWidth / imgNaturalWidth, containerHeight / imgNaturalHeight)
+      : Math.min(containerWidth / imgNaturalWidth, containerHeight / imgNaturalHeight);
+
+    const displayWidth = imgNaturalWidth * scale;
+    const displayHeight = imgNaturalHeight * scale;
+    const offsetX = (containerWidth - displayWidth) / 2;
+    const offsetY = (containerHeight - displayHeight) / 2;
+
+    setImageBounds({ displayWidth, displayHeight, offsetX, offsetY });
   }, []);
 
   useEffect(() => {
     const onResize = () => {
-      // Force a re-render so %->px conversion uses latest size
-      setLayoutTick((t) => t + 1);
+      // Run after layout settles.
+      if (typeof window.requestAnimationFrame === 'function') {
+        window.requestAnimationFrame(() => computeImageBounds());
+      } else {
+        computeImageBounds();
+      }
     };
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);
-  }, []);
+  }, [computeImageBounds]);
 
   const checkMapUpdate = async () => {
     try {
@@ -107,19 +160,28 @@ function Home() {
 
   const fetchRobotAnimation = async () => {
     if (robotAnimation) return;
-    try {
-      // Using a working free Lottie animation
-      const response = await fetch('https://assets2.lottiefiles.com/packages/lf20_vnikrcia.json');
-      const data = await response.json();
-      setRobotAnimation(data);
+    const load = async () => {
       try {
-        sessionStorage.setItem(CACHE_KEYS.robotAnimation, JSON.stringify(data));
-      } catch {
-        // ignore
+        // Using a working free Lottie animation
+        const response = await fetch('https://assets2.lottiefiles.com/packages/lf20_vnikrcia.json');
+        const data = await response.json();
+        setRobotAnimation(data);
+        try {
+          sessionStorage.setItem(CACHE_KEYS.robotAnimation, JSON.stringify(data));
+        } catch {
+          // ignore
+        }
+      } catch (error) {
+        console.error('Error loading robot animation:', error);
+        // Just use emoji fallback
       }
-    } catch (error) {
-      console.error('Error loading robot animation:', error);
-      // Just use emoji fallback
+    };
+
+    // Defer heavy JSON parsing until the browser is idle.
+    if (typeof window.requestIdleCallback === 'function') {
+      window.requestIdleCallback(() => load(), { timeout: 2500 });
+    } else {
+      setTimeout(() => load(), 900);
     }
   };
 
@@ -147,38 +209,12 @@ function Home() {
   };
   
   const handleMapImageLoad = () => {
-    setLayoutTick((t) => t + 1);
-  };
-
-  // Get actual displayed image dimensions (after object-fit)
-  const getActualImageBounds = () => {
-    if (!imageRef.current) return null;
-    
-    const img = imageRef.current;
-    const containerWidth = img.offsetWidth;
-    const containerHeight = img.offsetHeight;
-    const imgNaturalWidth = img.naturalWidth;
-    const imgNaturalHeight = img.naturalHeight;
-
-    if (!containerWidth || !containerHeight || !imgNaturalWidth || !imgNaturalHeight) {
-      return null;
-    }
-
-    const scale = MAP_OBJECT_FIT === 'cover'
-      ? Math.max(containerWidth / imgNaturalWidth, containerHeight / imgNaturalHeight)
-      : Math.min(containerWidth / imgNaturalWidth, containerHeight / imgNaturalHeight);
-
-    const displayWidth = imgNaturalWidth * scale;
-    const displayHeight = imgNaturalHeight * scale;
-    const offsetX = (containerWidth - displayWidth) / 2;
-    const offsetY = (containerHeight - displayHeight) / 2;
-    
-    return { displayWidth, displayHeight, offsetX, offsetY };
+    computeImageBounds();
   };
   
   // Convert pixel coordinates to percentages relative to actual image
   const pixelsToPercent = (x, y, width, height) => {
-    const bounds = getActualImageBounds();
+    const bounds = imageBounds;
     if (!bounds) return null;
     
     const relativeX = x - bounds.offsetX;
@@ -200,7 +236,7 @@ function Home() {
   
   // Convert percentage coordinates to pixels for display
   const percentToPixels = (coords) => {
-    const bounds = getActualImageBounds();
+    const bounds = imageBounds;
     if (!bounds) return null;
     
     const result = {
@@ -216,12 +252,39 @@ function Home() {
 
     return result;
   };
+
+  const blocksWithPixels = useMemo(() => {
+    if (!imageBounds || !blocks || blocks.length === 0) return [];
+    return blocks
+      .map((block) => {
+        if (!block || !block.coordinates) return null;
+
+        const coords = block.coordinates;
+        const left = imageBounds.offsetX + (coords.x / 100) * imageBounds.displayWidth;
+        const top = imageBounds.offsetY + (coords.y / 100) * imageBounds.displayHeight;
+        const width = (coords.width / 100) * imageBounds.displayWidth;
+        const height = (coords.height / 100) * imageBounds.displayHeight;
+
+        if (![left, top, width, height].every(Number.isFinite)) return null;
+
+        return {
+          block,
+          pixelCoords: { left, top, width, height },
+        };
+      })
+      .filter(Boolean);
+  }, [blocks, imageBounds]);
   
   // Mouse handlers for drawing rectangles
   const handleMouseDown = (e) => {
     if (!isAdmin || !editMode) return;
-    
-    const rect = imageRef.current.getBoundingClientRect();
+
+    const img = imageRef.current;
+    if (!img) return;
+
+    const rect = img.getBoundingClientRect();
+    drawImageRectRef.current = rect;
+
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
     
@@ -232,26 +295,47 @@ function Home() {
   
   const handleMouseMove = (e) => {
     if (!isAdmin || !editMode || !isDrawing || !startPos) return;
-    
-    const rect = imageRef.current.getBoundingClientRect();
-    const currentX = e.clientX - rect.left;
-    const currentY = e.clientY - rect.top;
-    
-    const width = currentX - startPos.x;
-    const height = currentY - startPos.y;
-    
-    setCurrentRect({
-      x: width > 0 ? startPos.x : currentX,
-      y: height > 0 ? startPos.y : currentY,
-      width: Math.abs(width),
-      height: Math.abs(height)
+
+    const rect = drawImageRectRef.current;
+    if (!rect) return;
+
+    // Throttle updates to animation frames to keep dragging smooth.
+    drawPendingPointRef.current = {
+      x: e.clientX - rect.left,
+      y: e.clientY - rect.top,
+    };
+
+    if (drawRafRef.current) return;
+
+    drawRafRef.current = window.requestAnimationFrame(() => {
+      drawRafRef.current = null;
+
+      const pending = drawPendingPointRef.current;
+      if (!pending) return;
+
+      const width = pending.x - startPos.x;
+      const height = pending.y - startPos.y;
+
+      setCurrentRect({
+        x: width > 0 ? startPos.x : pending.x,
+        y: height > 0 ? startPos.y : pending.y,
+        width: Math.abs(width),
+        height: Math.abs(height),
+      });
     });
   };
   
   const handleMouseUp = async (e) => {
     if (!isAdmin || !editMode || !isDrawing || !currentRect) return;
-    
+
     setIsDrawing(false);
+
+    if (drawRafRef.current) {
+      window.cancelAnimationFrame(drawRafRef.current);
+      drawRafRef.current = null;
+    }
+    drawPendingPointRef.current = null;
+    drawImageRectRef.current = null;
     
     // Only save if rectangle has reasonable size
     if (currentRect.width > 20 && currentRect.height > 20) {
@@ -319,22 +403,18 @@ function Home() {
     <div className="map-container">
       <h1 
         className={`title ${isAdmin ? 'admin-mode' : ''}`}
-        onClick={() => !isAdmin && navigate('/login')}
-        title={!isAdmin ? "Click to access Admin Login" : "Vignan University Navigator"}
+        title="Vignan University Navigator"
       >
         Vignan University Navigator
       </h1>
-      
-      {/* Map Edit Control (always visible; requires admin login) */}
-      <div style={{
-        position: 'fixed',
-        top: '70px',
-        right: '20px',
-        zIndex: 5000,
-        display: 'flex',
-        gap: '10px'
-      }}>
+
+      {/* Navbar actions (keep Admin Edit Map in the top bar) */}
+      <div className="home-nav-actions">
+        {/* Hidden - navigate to /login directly instead */}
+        {false && (
         <button
+          type="button"
+          className={`home-nav-btn ${isAdmin ? (editMode ? 'home-nav-btn--danger' : 'home-nav-btn--primary') : 'home-nav-btn--muted'}`}
           onClick={() => {
             if (!isAdmin) {
               navigate('/login');
@@ -342,34 +422,18 @@ function Home() {
             }
             toggleEditMode();
           }}
-          style={{
-            padding: '12px 24px',
-            borderRadius: '8px',
-            border: 'none',
-            background: isAdmin ? (editMode ? '#ef4444' : '#10b981') : '#64748b',
-            color: 'white',
-            fontWeight: '600',
-            cursor: 'pointer',
-            boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-            transition: 'all 0.2s'
-          }}
           title={isAdmin ? 'Edit map rectangles' : 'Admin login required'}
         >
-          {isAdmin ? (editMode ? '❌ Exit Edit Map' : '✏️ Edit Map') : '🔒 Admin Edit Map'}
+          {isAdmin ? (editMode ? '❌ Exit Edit Map' : '✏️ Edit Map') : 'Admin Edit Map'}
         </button>
+        )}
+
         {isAdmin && editMode && (
           <button
+            type="button"
+            className="home-nav-btn home-nav-btn--secondary"
             onClick={() => navigate('/dashboard')}
-            style={{
-              padding: '12px 24px',
-              borderRadius: '8px',
-              border: 'none',
-              background: '#3b82f6',
-              color: 'white',
-              fontWeight: '600',
-              cursor: 'pointer',
-              boxShadow: '0 4px 12px rgba(0,0,0,0.15)'
-            }}
+            title="Open Dashboard"
           >
             📊 Dashboard
           </button>
@@ -415,7 +479,6 @@ function Home() {
         >
           <img
             ref={imageRef}
-            key={mapTimestamp}
             src={mapTimestamp ? `/api/blocks/map-image?t=${mapTimestamp}` : '/api/blocks/map-image'}
             alt="Campus Map"
             className="map-image"
@@ -428,6 +491,7 @@ function Home() {
               objectFit: 'cover',
               pointerEvents: isAdmin && editMode ? 'none' : 'auto'
             }}
+            decoding="async"
             onLoad={handleMapImageLoad}
           />
           
@@ -449,12 +513,7 @@ function Home() {
           )}
           
           {/* Clickable areas for blocks */}
-          {blocks.map((block) => {
-            if (!block.coordinates) return null;
-            
-            const pixelCoords = percentToPixels(block.coordinates);
-            if (!pixelCoords) return null;
-            
+          {blocksWithPixels.map(({ block, pixelCoords }) => {
             return (
               <div
                 key={block.name}
@@ -527,11 +586,13 @@ function Home() {
             title="Click to chat with AI Assistant!"
           >
             {robotAnimation ? (
-              <Lottie 
-                animationData={robotAnimation}
-                loop={true}
-                style={{ width: '120px', height: '120px' }}
-              />
+              <Suspense fallback={<div className="robot-emoji">🤖</div>}>
+                <Lottie 
+                  animationData={robotAnimation}
+                  loop={true}
+                  style={{ width: '120px', height: '120px' }}
+                />
+              </Suspense>
             ) : (
               <div className="robot-emoji">🤖</div>
             )}
@@ -542,7 +603,9 @@ function Home() {
         {assistantOpen && !editMode && (
           <div className="assistant-widget-shell" onClick={() => setAssistantOpen(false)}>
             <div className="assistant-widget" onClick={(e) => e.stopPropagation()}>
-              <Assistant embedded onClose={() => setAssistantOpen(false)} />
+              <Suspense fallback={null}>
+                <Assistant embedded onClose={() => setAssistantOpen(false)} />
+              </Suspense>
             </div>
           </div>
         )}

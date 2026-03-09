@@ -43,7 +43,7 @@ function Login() {
 
   return (
     <div className="login-container">
-      <button className="back-button" onClick={() => navigate('/')}>
+      <button className="back-button" onClick={() => navigate('/home') }>
         ← Back to Map
       </button>
       
@@ -89,9 +89,9 @@ function Login() {
           >
             {loading ? 'Logging in...' : 'Login'}
           </button>
-          
+
           <div className="demo-credentials">
-            <small>Demo: username: <strong>admin</strong> | password: <strong>admin123</strong></small>
+            <small>Note: Admin account must be created before login.</small>
           </div>
         </form>
       </div>

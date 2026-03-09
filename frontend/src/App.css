@@ -388,6 +388,62 @@ input, textarea {
   box-shadow: 0 2px 12px rgba(59, 130, 246, 0.15);
 }
 
+/* Home navbar actions (Admin Edit Map) */
+.home-nav-actions {
+  position: absolute;
+  top: 8px;
+  right: 14px;
+  z-index: 20;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.home-nav-btn {
+  border: 1px solid transparent;
+  border-radius: 12px;
+  padding: 10px 14px;
+  min-height: 40px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 0.18s ease, box-shadow 0.18s ease, background-color 0.18s ease, border-color 0.18s ease;
+  background: rgba(255, 255, 255, 0.85);
+  color: var(--text-strong);
+  border-color: rgba(31, 41, 55, 0.14);
+  backdrop-filter: blur(10px);
+}
+
+.home-nav-btn:hover {
+  transform: translateY(-1px);
+  border-color: rgba(59, 130, 246, 0.35);
+  box-shadow: 0 10px 18px rgba(31, 41, 55, 0.12);
+}
+
+.home-nav-btn--primary {
+  color: var(--surface-base);
+  background: linear-gradient(135deg, var(--brand-navy) 0%, var(--brand-blue) 75%);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.home-nav-btn--secondary {
+  background: rgba(59, 130, 246, 0.1);
+  border-color: rgba(59, 130, 246, 0.3);
+  color: var(--brand-navy);
+}
+
+.home-nav-btn--danger {
+  color: var(--surface-base);
+  background: var(--accent-red);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.home-nav-btn--muted {
+  background: rgba(107, 114, 128, 0.12);
+  border-color: rgba(107, 114, 128, 0.22);
+  color: var(--text-strong);
+}
+
 .loading {
   text-align: center;
   font-size: 22px;

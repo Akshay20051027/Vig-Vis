@@ -1,0 +1,27 @@
+{
+  "name": "mahotsav-website",
+  "version": "1.0.0",
+  "description": "MERN Stack website for Mahotsav campus navigation",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server/server.js",
+    "dev": "concurrently \"npm run server\" \"npm run client\"",
+    "server": "nodemon server/server.js",
+    "client": "npm start --prefix client",
+    "install-all": "npm install && cd client && npm install"
+  },
+  "keywords": ["mern", "campus", "navigation"],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "express": "^4.18.2",
+    "mongoose": "^7.0.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.0.3",
+    "path": "^0.12.7"
+  },
+  "devDependencies": {
+    "nodemon": "^2.0.22",
+    "concurrently": "^8.0.1"
+  }
+}

@@ -2,10 +2,30 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <link rel="icon" href="/vignan-logo.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#000000" />
-    <meta name="description" content="Mahotsav 26 Campus Navigator" />
-    <title>Mahotsav 26 - Campus Navigator</title>
+    <meta name="theme-color" content="#1e40af" />
+    <meta name="description" content="Vignan University Navigator" />
+    <title>Vignan University Navigator</title>
+    <style>
+      /* Hide browser extension overlays and buttons */
+      body {
+        isolation: isolate;
+      }
+      /* Hide common browser extension injection points */
+      [class*="extension"],
+      [id*="extension"],
+      [class*="chrome-extension"],
+      [id*="chrome-extension"],
+      iframe[src*="extension"],
+      div[style*="position: fixed"][style*="z-index: 2147483647"],
+      div[style*="position: fixed"][style*="z-index: 999999"] {
+        display: none !important;
+        visibility: hidden !important;
+        opacity: 0 !important;
+        pointer-events: none !important;
+      }
+    </style>
   </head>
   <body>
     <noscript>You need to enable JavaScript to run this app.</noscript>

@@ -7,7 +7,7 @@ const blocks = [
   {
     name: 'a-block',
     displayName: 'A-block',
-    image: '/public/a-block/ablock.jpg',
+    image: '/public/blocks/a-block.jpg',
     sections: [
       {
         name: 'labs',

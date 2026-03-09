@@ -41,7 +41,7 @@ function BlockView() {
   if (!block) {
     return (
       <div className="block-container">
-        <button className="back-button" onClick={() => navigate('/')}>
+        <button className="back-button" onClick={() => navigate('/home') }>
           ← Back to Map
         </button>
         <div className="loading">Block not found</div>
@@ -52,7 +52,7 @@ function BlockView() {
   return (
     <div className="block-container">
       <button className="back-button" onClick={() => {
-        navigate('/');
+        navigate('/home');
       }}>
         ← Back to Map
       </button>

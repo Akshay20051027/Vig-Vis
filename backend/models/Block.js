@@ -4,7 +4,8 @@ const BlockSchema = new mongoose.Schema({
   name: {
     type: String,
     required: true,
-    unique: true
+    unique: true,
+    index: true
   },
   displayName: {
     type: String,
@@ -12,20 +13,12 @@ const BlockSchema = new mongoose.Schema({
   },
   image: {
     type: String,
-    required: false // Legacy: file path for backward compatibility
-  },
-  imageData: {
-    type: String, // Base64 encoded image data
-    required: false
-  },
-  imageContentType: {
-    type: String, // MIME type (image/png, image/jpeg, etc.)
-    required: false
+    required: false // URL/path (recommended: /public/blocks/<name>.<ext>)
   },
   sections: [{
     name: String,
     displayName: String,
-    video: String,
+    video: String, // URL/path
     coordinates: {
       x: Number,
       y: Number,

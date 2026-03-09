@@ -1,17 +1,21 @@
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
+const compression = require('compression');
 const path = require('path');
 const fs = require('fs');
 require('dotenv').config();
 
 const app = express();
 
+app.disable('x-powered-by');
+
 // Fail fast if MongoDB is unavailable (prevents hanging buffered queries)
 mongoose.set('bufferCommands', false);
 
 // Middleware
 app.use(cors());
+app.use(compression({ threshold: 1024 }));
 app.use(express.json());
 
 // Custom video streaming middleware

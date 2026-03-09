@@ -19,9 +19,9 @@ function Assistant({ embedded = false, onClose = null }) {
     { code: 'ml-IN', name: 'Malayalam' },
   ];
 
-  const [assistantMode, setAssistantMode] = useState(null); // 'voice' | 'text'
-  const [assistantStep, setAssistantStep] = useState('greeting');
-  const [selectedLanguage, setSelectedLanguage] = useState('en-IN');
+  const [assistantMode, setAssistantMode] = useState(embedded ? 'voice' : null); // 'voice' | 'text'
+  const [assistantStep, setAssistantStep] = useState(embedded ? 'language-select' : 'mode-select');
+  const [selectedLanguage, setSelectedLanguage] = useState('');
   const [userQuestion, setUserQuestion] = useState('');
   const [assistantAnswer, setAssistantAnswer] = useState('');
   const [textInput, setTextInput] = useState('');
@@ -30,78 +30,209 @@ function Assistant({ embedded = false, onClose = null }) {
   const [labOptions, setLabOptions] = useState([]);
   const [labQueryType, setLabQueryType] = useState('');
   const [isPlayingAudio, setIsPlayingAudio] = useState(false);
+  const [needsLunchCheck, setNeedsLunchCheck] = useState(false);
+  const [voiceError, setVoiceError] = useState('');
 
   const recognitionRef = useRef(null);
   const audioRef = useRef(null);
+  const aliveRef = useRef(true);
+  const ttsAbortRef = useRef(null);
+  const welcomeSpokenRef = useRef(false);
 
   useEffect(() => {
     let cancelled = false;
 
-    async function initGreeting() {
-      setAssistantStep('greeting');
-      setAssistantMode(null);
-      setSelectedLanguage('en-IN');
-      setUserQuestion('');
-      setAssistantAnswer('');
-      setLabOptions([]);
-      setLabQueryType('');
+    aliveRef.current = true;
 
-      const cachedGreeting = cacheRead(GREETING_CACHE_KEY, null);
-      if (cachedGreeting) {
-        setAssistantAnswer(cachedGreeting);
-        speakWithBrowserTts(cachedGreeting, 'en-IN');
-        setTimeout(() => {
-          if (!cancelled) setAssistantStep('mode-select');
-        }, 2200);
-      }
-
-      try {
-        const response = await axios.get('/api/assistant/greeting', {
-          params: { language: 'en-IN' },
-          headers: {
-            'Cache-Control': 'no-cache, no-store, must-revalidate',
-            Pragma: 'no-cache',
-          },
-        });
-
-        const greeting = response?.data?.translated_greeting || response?.data?.greeting;
-        if (!cancelled && greeting) {
-          cacheWrite(GREETING_CACHE_KEY, greeting, GREETING_CACHE_TTL_MS);
-
-          // If we already showed cached greeting, only update if different.
-          if (greeting !== cachedGreeting) {
-            setAssistantAnswer(greeting);
-            speakWithBrowserTts(greeting, 'en-IN');
-          }
-
-          setTimeout(() => {
-            if (!cancelled) setAssistantStep('mode-select');
-          }, 2200);
-        }
-      } catch (error) {
-        const fallback = 'Hello! Welcome to Mahotsav-26 Campus Assistant.';
-        if (!cancelled) {
-          if (!cachedGreeting) {
-            setAssistantAnswer(fallback);
-            speakWithBrowserTts(fallback, 'en-IN');
-            setTimeout(() => {
-              if (!cancelled) setAssistantStep('mode-select');
-            }, 2200);
-          }
-        }
-      }
-    }
-
-    initGreeting();
+    // Greeting is shown after language selection (per UX request).
 
     return () => {
       cancelled = true;
+      aliveRef.current = false;
+      if (ttsAbortRef.current) {
+        try {
+          ttsAbortRef.current.abort();
+        } catch (_) {
+          // ignore
+        }
+      }
       stopListening();
       stopAudio();
       if ('speechSynthesis' in window) window.speechSynthesis.cancel();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (!embedded) return;
+    if (assistantStep !== 'language-select') return;
+    if (welcomeSpokenRef.current) return;
+
+    welcomeSpokenRef.current = true;
+
+    const welcomeText = 'Welcome to Mahotsav-26 Campus Assistant. Please select your language.';
+    setAssistantAnswer(welcomeText);
+    speakWithBrowserTts(welcomeText, 'en-IN');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [embedded, assistantStep]);
+
+  const getTimeInfo = () => {
+    const now = new Date();
+    const hour = now.getHours();
+    const isLunchWindow = hour >= 12 && hour < 16;
+    const timeOfDay = hour < 12 ? 'morning' : hour < 17 ? 'afternoon' : 'evening';
+    return { hour, isLunchWindow, timeOfDay };
+  };
+
+  const LUNCH_COPY = {
+    'en-IN': {
+      greeting: {
+        morning: 'Good morning! Welcome to Mahotsav-26 Campus Assistant.',
+        afternoon: 'Good afternoon! Welcome to Mahotsav-26 Campus Assistant.',
+        evening: 'Good evening! Welcome to Mahotsav-26 Campus Assistant.',
+      },
+      lunchQuestion: 'Did you have lunch?',
+      lunchYes: 'Great! How can I help you today?',
+      lunchNoNow: 'No problem. Lunch is being served now at the Boys Hostel.',
+      lunchNoLate: 'No problem. Lunch is usually available at the Boys Hostel during lunch hours.',
+      yes: 'Yes',
+      no: 'No',
+    },
+    'te-IN': {
+      greeting: {
+        morning: 'శుభోదయం! మహోత్సవ్-26 క్యాంపస్ అసిస్టెంట్‌కు స్వాగతం.',
+        afternoon: 'శుభ మధ్యాహ్నం! మహోత్సవ్-26 క్యాంపస్ అసిస్టెంట్‌కు స్వాగతం.',
+        evening: 'శుభ సాయంత్రం! మహోత్సవ్-26 క్యాంపస్ అసిస్టెంట్‌కు స్వాగతం.',
+      },
+      lunchQuestion: 'మీరు లంచ్ చేశారా?',
+      lunchYes: 'బాగుంది! నేను మీకు ఎలా సహాయం చేయాలి?',
+      lunchNoNow: 'పర్లేదు. బాయ్స్ హాస్టల్‌లో ఇప్పుడు లంచ్ సర్వ్ చేస్తున్నారు.',
+      lunchNoLate: 'పర్లేదు. లంచ్ టైమ్‌లో బాయ్స్ హాస్టల్‌లో లంచ్ అందుబాటులో ఉంటుంది.',
+      yes: 'అవును',
+      no: 'లేదు',
+    },
+    'hi-IN': {
+      greeting: {
+        morning: 'सुप्रभात! महोत्सव-26 कैंपस असिस्टेंट में आपका स्वागत है।',
+        afternoon: 'शुभ दोपहर! महोत्सव-26 कैंपस असिस्टेंट में आपका स्वागत है।',
+        evening: 'शुभ संध्या! महोत्सव-26 कैंपस असिस्टेंट में आपका स्वागत है।',
+      },
+      lunchQuestion: 'क्या आपने लंच किया?',
+      lunchYes: 'बहुत बढ़िया! मैं आपकी कैसे मदद करूं?',
+      lunchNoNow: 'कोई बात नहीं। Boys Hostel में अभी लंच सर्व हो रहा है।',
+      lunchNoLate: 'कोई बात नहीं। लंच टाइम में Boys Hostel में लंच मिलता है।',
+      yes: 'हाँ',
+      no: 'नहीं',
+    },
+    'ta-IN': {
+      greeting: {
+        morning: 'காலை வணக்கம்! Mahotsav-26 Campus Assistant-க்கு வரவேற்கிறோம்.',
+        afternoon: 'மதிய வணக்கம்! Mahotsav-26 Campus Assistant-க்கு வரவேற்கிறோம்.',
+        evening: 'மாலை வணக்கம்! Mahotsav-26 Campus Assistant-க்கு வரவேற்கிறோம்.',
+      },
+      lunchQuestion: 'நீங்கள் மதிய உணவு சாப்பிட்டீர்களா?',
+      lunchYes: 'சரி! நான் எப்படி உதவி செய்யலாம்?',
+      lunchNoNow: 'பரவாயில்லை. Boys Hostel-ல் இப்போது லஞ்ச் வழங்கப்படுகிறது.',
+      lunchNoLate: 'பரவாயில்லை. லஞ்ச் நேரத்தில் Boys Hostel-ல் லஞ்ச் கிடைக்கும்.',
+      yes: 'ஆம்',
+      no: 'இல்லை',
+    },
+    'kn-IN': {
+      greeting: {
+        morning: 'ಶುಭೋದಯ! Mahotsav-26 Campus Assistant ಗೆ ಸ್ವಾಗತ.',
+        afternoon: 'ಶುಭ ಮಧ್ಯಾಹ್ನ! Mahotsav-26 Campus Assistant ಗೆ ಸ್ವಾಗತ.',
+        evening: 'ಶುಭ ಸಂಜೆ! Mahotsav-26 Campus Assistant ಗೆ ಸ್ವಾಗತ.',
+      },
+      lunchQuestion: 'ನೀವು ಲಂಚ್ ಮಾಡಿಕೊಂಡಿರಾ?',
+      lunchYes: 'ಚೆನ್ನಾಗಿದೆ! ನಾನು ಹೇಗೆ ಸಹಾಯ ಮಾಡಲಿ?',
+      lunchNoNow: 'ಸರಿ. Boys Hostel ನಲ್ಲಿ ಈಗ ಲಂಚ್ ಸರ್ವ್ ಆಗುತ್ತಿದೆ.',
+      lunchNoLate: 'ಸರಿ. ಲಂಚ್ ಸಮಯದಲ್ಲಿ Boys Hostel ನಲ್ಲಿ ಲಂಚ್ ಲಭ್ಯ.',
+      yes: 'ಹೌದು',
+      no: 'ಇಲ್ಲ',
+    },
+    'ml-IN': {
+      greeting: {
+        morning: 'സുപ്രഭാതം! Mahotsav-26 Campus Assistant ലേക്ക് സ്വാഗതം.',
+        afternoon: 'ശുഭ ഉച്ച! Mahotsav-26 Campus Assistant ലേക്ക് സ്വാഗതം.',
+        evening: 'ശുഭ സന്ധ്യ! Mahotsav-26 Campus Assistant ലേക്ക് സ്വാഗതം.',
+      },
+      lunchQuestion: 'നിങ്ങൾ ലഞ്ച് കഴിച്ചോ?',
+      lunchYes: 'നന്നായി! ഞാൻ എങ്ങനെ സഹായിക്കാം?',
+      lunchNoNow: 'ശരി. Boys Hostel ൽ ഇപ്പോൾ ലഞ്ച് നൽകുന്നു.',
+      lunchNoLate: 'ശരി. ലഞ്ച് സമയത്ത് Boys Hostel ൽ ലഞ്ച് ലഭിക്കും.',
+      yes: 'അതെ',
+      no: 'ഇല്ല',
+    },
+  };
+
+  const parseYesNo = (text) => {
+    const normalized = (text || '').trim().toLowerCase();
+    if (!normalized) return null;
+
+    const yesWords = [
+      'yes', 'y', 'yeah', 'yep', 'sure', 'ok', 'okay',
+      'ha', 'haan', 'han', 'ji',
+      'avunu', 'yesu',
+      'ஆம்',
+      'ಹೌದು',
+      'അതെ',
+      'అవును',
+      'हाँ',
+    ];
+    const noWords = [
+      'no', 'n', 'nope', 'not yet',
+      'nahi', 'nahin',
+      'ledu',
+      'இல்லை',
+      'ಇಲ್ಲ',
+      'ഇല്ല',
+      'లేదు',
+      'नहीं',
+    ];
+
+    if (yesWords.some((w) => normalized === w || normalized.startsWith(w + ' '))) return true;
+    if (noWords.some((w) => normalized === w || normalized.startsWith(w + ' '))) return false;
+    return null;
+  };
+
+  const runGreetingAfterLanguageSelect = async (langCode) => {
+    stopListening();
+    stopAudio();
+    if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+
+    setUserQuestion('');
+    setTextInput('');
+    setLabOptions([]);
+    setLabQueryType('');
+    setNeedsLunchCheck(false);
+
+    const langToUse = langCode || 'en-IN';
+    const copy = LUNCH_COPY[langToUse] || LUNCH_COPY['en-IN'];
+    const { isLunchWindow, timeOfDay } = getTimeInfo();
+    const greetingText = (copy.greeting && copy.greeting[timeOfDay])
+      ? copy.greeting[timeOfDay]
+      : 'Hello! Welcome to Mahotsav-26 Campus Assistant.';
+
+    setAssistantAnswer(greetingText);
+    setAssistantStep('greeting');
+    speakWithBrowserTts(greetingText, langToUse);
+
+    if (isLunchWindow) {
+      setNeedsLunchCheck(true);
+      setTimeout(() => {
+        if (!aliveRef.current) return;
+        setAssistantAnswer(copy.lunchQuestion);
+        setAssistantStep('lunch-check');
+        speakWithBrowserTts(copy.lunchQuestion, langToUse);
+      }, 1300);
+    } else {
+      setTimeout(() => {
+        if (!aliveRef.current) return;
+        setAssistantStep('input');
+        if (assistantMode === 'voice') setTimeout(() => startVoiceInput(langToUse), 250);
+      }, 1100);
+    }
+  };
 
   const speakWithBrowserTts = (text, lang) => {
     if (!('speechSynthesis' in window)) return;
@@ -142,40 +273,40 @@ function Assistant({ embedded = false, onClose = null }) {
   const handleModeSelect = (mode) => {
     stopListening();
     stopAudio();
+    setVoiceError('');
     setAssistantMode(mode);
-    if (mode === 'voice') {
-      setAssistantStep('language-select');
-    } else {
-      setAssistantStep('input');
-    }
+    setAssistantStep('language-select');
   };
 
   const handleLanguageSelect = (langCode) => {
     setSelectedLanguage(langCode);
-    setAssistantStep('input');
-    setTimeout(() => startVoiceInput(langCode), 300);
+    setVoiceError('');
+    runGreetingAfterLanguageSelect(langCode);
   };
 
-  const startVoiceInput = (langCode) => {
+  const startVoiceInput = (langCode, onFinalTranscript = null) => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) {
-      alert('Voice recognition not supported in your browser. Please use Chrome or Edge.');
+      setVoiceError('Voice recognition is not supported in this browser. Please use Chrome or Edge.');
       return;
     }
 
     stopListening();
+    setVoiceError('');
 
     const recognition = new SpeechRecognition();
     const languageToUse = langCode || selectedLanguage || 'en-IN';
     recognition.lang = languageToUse;
     recognition.langCode = languageToUse; // custom field for race-free submit
-    recognition.continuous = true;
+    recognition.continuous = false;
     recognition.interimResults = true;
     recognition.maxAlternatives = 1;
 
     setIsListening(true);
     let finalTranscript = '';
+    let latestTranscript = '';
     let silenceTimer = null;
+    let submitted = false;
 
     recognition.onstart = () => {
       finalTranscript = '';
@@ -193,11 +324,12 @@ function Assistant({ embedded = false, onClose = null }) {
       }
 
       const displayText = (finalTranscript + interimTranscript).trim();
+      latestTranscript = displayText;
       setUserQuestion(displayText);
 
       if (silenceTimer) clearTimeout(silenceTimer);
       silenceTimer = setTimeout(() => {
-        const toSubmit = finalTranscript.trim();
+        const toSubmit = (finalTranscript.trim() || latestTranscript || '').trim();
         if (toSubmit) {
           try {
             recognition.stop();
@@ -206,42 +338,126 @@ function Assistant({ embedded = false, onClose = null }) {
           }
           setIsListening(false);
           setUserQuestion(toSubmit);
-          handleSubmitQuestion(toSubmit, recognition.langCode);
+          submitted = true;
+          if (typeof onFinalTranscript === 'function') {
+            onFinalTranscript(toSubmit, recognition.langCode);
+          } else {
+            handleSubmitQuestion(toSubmit, recognition.langCode);
+          }
         }
       }, 1700);
     };
 
-    recognition.onerror = () => {
+    recognition.onerror = (event) => {
       setIsListening(false);
-      alert('Could not understand. Please try again.');
+      recognitionRef.current = null;
+
+      const code = event?.error;
+      if (code === 'not-allowed' || code === 'service-not-allowed') {
+        setVoiceError('Microphone permission blocked. Allow mic access and try again. (Voice often requires HTTPS except on localhost.)');
+      } else if (code === 'audio-capture') {
+        setVoiceError('No microphone detected (or it is busy). Check your mic settings and try again.');
+      } else if (code === 'network') {
+        setVoiceError('Speech recognition network error. Try again or switch to Text mode.');
+      } else if (code === 'no-speech') {
+        setVoiceError('No speech detected. Tap Start and speak clearly.');
+      } else {
+        setVoiceError('Could not understand. Please try again (or switch to Text mode).');
+      }
     };
 
     recognition.onend = () => {
       setIsListening(false);
       recognitionRef.current = null;
+
+      if (submitted) return;
+      const toSubmit = (finalTranscript.trim() || latestTranscript || '').trim();
+      if (!toSubmit) return;
+
+      submitted = true;
+      setUserQuestion(toSubmit);
+      if (typeof onFinalTranscript === 'function') {
+        onFinalTranscript(toSubmit, recognition.langCode);
+      } else {
+        handleSubmitQuestion(toSubmit, recognition.langCode);
+      }
     };
 
     recognitionRef.current = recognition;
-    recognition.start();
+    try {
+      recognition.start();
+    } catch (e) {
+      setIsListening(false);
+      recognitionRef.current = null;
+      setVoiceError('Unable to start voice recognition. Please allow microphone permission and try again.');
+    }
   };
 
   const handleTextSubmit = (e) => {
     e.preventDefault();
     if (!textInput.trim()) return;
-    setUserQuestion(textInput.trim());
-    handleSubmitQuestion(textInput.trim(), selectedLanguage);
+    const value = textInput.trim();
+    setUserQuestion(value);
+    if (assistantStep === 'lunch-check') {
+      const yn = parseYesNo(value);
+      if (yn === null) {
+        const copy = LUNCH_COPY[selectedLanguage] || LUNCH_COPY['en-IN'];
+        setAssistantAnswer(copy.lunchQuestion);
+        speakWithBrowserTts(copy.lunchQuestion, selectedLanguage);
+        return;
+      }
+      handleLunchDecision(yn);
+      return;
+    }
+    handleSubmitQuestion(value, selectedLanguage);
+  };
+
+  const handleLunchDecision = (didHaveLunch) => {
+    const langToUse = selectedLanguage || 'en-IN';
+    const copy = LUNCH_COPY[langToUse] || LUNCH_COPY['en-IN'];
+    const { isLunchWindow } = getTimeInfo();
+
+    setNeedsLunchCheck(false);
+
+    const next = didHaveLunch
+      ? copy.lunchYes
+      : (isLunchWindow ? copy.lunchNoNow : copy.lunchNoLate);
+
+    setAssistantAnswer(next);
+    speakWithBrowserTts(next, langToUse);
+
+    setTimeout(() => {
+      if (!aliveRef.current) return;
+      setAssistantStep('input');
+      if (assistantMode === 'voice') setTimeout(() => startVoiceInput(langToUse), 250);
+    }, 1100);
   };
 
   const speakWithServerTts = async (text, languageToUse) => {
     try {
+      // Abort any in-flight TTS request to prevent late audio playback.
+      if (ttsAbortRef.current) {
+        try {
+          ttsAbortRef.current.abort();
+        } catch (_) {
+          // ignore
+        }
+      }
+      const controller = new AbortController();
+      ttsAbortRef.current = controller;
+
       const ttsResponse = await fetch('/api/assistant/tts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text, language: languageToUse || 'en-IN' }),
+        signal: controller.signal,
       });
 
       if (!ttsResponse.ok) return false;
       const audioBlob = await ttsResponse.blob();
+
+      if (!aliveRef.current) return false;
+
       const audioUrl = URL.createObjectURL(audioBlob);
       const audio = new Audio(audioUrl);
       audioRef.current = audio;
@@ -249,9 +465,35 @@ function Assistant({ embedded = false, onClose = null }) {
       audio.onended = () => {
         setIsPlayingAudio(false);
         audioRef.current = null;
+        try {
+          URL.revokeObjectURL(audioUrl);
+        } catch (_) {
+          // ignore
+        }
       };
-      await audio.play();
-      return true;
+
+      if (!aliveRef.current) {
+        try {
+          URL.revokeObjectURL(audioUrl);
+        } catch (_) {
+          // ignore
+        }
+        return false;
+      }
+
+      try {
+        await audio.play();
+        return true;
+      } catch (_) {
+        setIsPlayingAudio(false);
+        audioRef.current = null;
+        try {
+          URL.revokeObjectURL(audioUrl);
+        } catch (e) {
+          // ignore
+        }
+        return false;
+      }
     } catch (_) {
       return false;
     }
@@ -308,8 +550,11 @@ function Assistant({ embedded = false, onClose = null }) {
         setAssistantStep('answer');
       }
 
+      if (!aliveRef.current) return;
+
       // Speak: prefer server TTS, fallback to browser
       const ok = await speakWithServerTts(displayAnswer, languageToUse);
+      if (!aliveRef.current) return;
       if (!ok) speakWithBrowserTts(displayAnswer, languageToUse);
     } catch (error) {
       setAssistantAnswer('Sorry, I could not connect to the assistant. Please make sure the assistant service is running.');
@@ -337,14 +582,16 @@ function Assistant({ embedded = false, onClose = null }) {
   const handleStartOver = () => {
     stopListening();
     stopAudio();
-    setAssistantMode(null);
-    setAssistantStep('mode-select');
-    setSelectedLanguage('en-IN');
+    setAssistantMode(embedded ? 'voice' : null);
+    setAssistantStep(embedded ? 'language-select' : 'mode-select');
+    setSelectedLanguage('');
     setTextInput('');
     setUserQuestion('');
     setAssistantAnswer('');
     setLabOptions([]);
     setLabQueryType('');
+    setNeedsLunchCheck(false);
+    welcomeSpokenRef.current = false;
   };
 
   const handleLabSelect = (option) => {
@@ -373,7 +620,7 @@ function Assistant({ embedded = false, onClose = null }) {
         </div>
       ) : (
         <>
-          <button className="back-button" onClick={() => navigate('/') }>
+          <button className="back-button" onClick={() => navigate('/home') }>
             ← Back to Map
           </button>
           <h1 className="title">Campus Assistant</h1>
@@ -415,7 +662,7 @@ function Assistant({ embedded = false, onClose = null }) {
             </div>
           )}
 
-          {assistantStep === 'language-select' && assistantMode === 'voice' && (
+          {assistantStep === 'language-select' && (
             <div className="assistant-section">
               <p className="assistant-prompt">Select your language:</p>
               <div className="assistant-grid">
@@ -435,12 +682,50 @@ function Assistant({ embedded = false, onClose = null }) {
             </div>
           )}
 
+          {assistantStep === 'lunch-check' && (
+            <div className="assistant-section">
+              <p className="assistant-prompt">{assistantAnswer || (LUNCH_COPY[selectedLanguage] || LUNCH_COPY['en-IN']).lunchQuestion}</p>
+              <div className="assistant-row">
+                <button className="assistant-primary" onClick={() => handleLunchDecision(true)}>
+                  {(LUNCH_COPY[selectedLanguage] || LUNCH_COPY['en-IN']).yes}
+                </button>
+                <button className="assistant-secondary" onClick={() => handleLunchDecision(false)}>
+                  {(LUNCH_COPY[selectedLanguage] || LUNCH_COPY['en-IN']).no}
+                </button>
+              </div>
+
+              {assistantMode === 'voice' ? (
+                <div className="assistant-row" style={{ marginTop: 12 }}>
+                  {isListening ? (
+                    <button className="assistant-danger" onClick={stopListening}>⏹ Stop</button>
+                  ) : (
+                    <button
+                      className="assistant-tertiary"
+                      onClick={() => startVoiceInput(selectedLanguage, (t) => {
+                        const yn = parseYesNo(t);
+                        if (yn === null) return;
+                        handleLunchDecision(yn);
+                      })}
+                    >
+                      🎤 Answer by voice
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <div className="assistant-row" style={{ marginTop: 12 }}>
+                  <button className="assistant-tertiary" onClick={() => setAssistantStep('input')}>Skip</button>
+                </div>
+              )}
+            </div>
+          )}
+
           {assistantStep === 'input' && assistantMode === 'voice' && (
             <div className="assistant-section">
               {isListening ? (
                 <>
                   <p className="assistant-status">Listening…</p>
                   {userQuestion ? <div className="assistant-transcript">{userQuestion}</div> : null}
+                  {voiceError ? <p className="assistant-status" style={{ marginTop: 8 }}>{voiceError}</p> : null}
                   <div className="assistant-row">
                     <button className="assistant-danger" onClick={stopListening}>⏹ Stop</button>
                   </div>
@@ -448,6 +733,7 @@ function Assistant({ embedded = false, onClose = null }) {
               ) : (
                 <>
                   <p className="assistant-prompt">Ready to listen in {languages.find(l => l.code === selectedLanguage)?.name || 'English'}</p>
+                  {voiceError ? <p className="assistant-status" style={{ marginTop: 8 }}>{voiceError}</p> : null}
                   <div className="assistant-row">
                     <button className="assistant-primary" onClick={() => startVoiceInput(selectedLanguage)}>🎤 Start Speaking</button>
                     <button className="assistant-tertiary" onClick={() => setAssistantStep('language-select')}>Change Language</button>

@@ -101,6 +101,4 @@ Frontend runs on **port 3000** by default.
 
 ## 🔐 Admin Access
 
-Default credentials:
-- Username: `admin`
-- Password: `admin123`
+Admin credentials are not created automatically.

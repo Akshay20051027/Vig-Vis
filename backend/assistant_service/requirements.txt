@@ -1,0 +1,12 @@
+faiss-cpu
+sentence-transformers
+numpy
+SpeechRecognition
+pyttsx3
+pyaudio
+deep-translator
+gTTS
+pygame
+flask
+flask-cors
+requests

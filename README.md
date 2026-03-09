@@ -1,14 +1,14 @@
 # Mahotsav 26 - Campus Navigator
 
-A full-stack MERN application for interactive campus navigation with admin dashboard and map editing capabilities.
+A full-stack MERN application with AI assistant for interactive campus navigation, admin dashboard, and map editing capabilities.
 
 ## 📁 Project Structure
 
 ```
 bot/
-├── frontend/           # React + Vite frontend
+├── frontend/                      # React + Vite frontend
 │   ├── src/
-│   │   ├── pages/     # React components
+│   │   ├── pages/                # React components
 │   │   ├── App.js
 │   │   ├── App.css
 │   │   └── index.js
@@ -16,22 +16,31 @@ bot/
 │   ├── vite.config.js
 │   └── package.json
 │
-├── backend/            # Express + MongoDB backend
-│   ├── models/        # MongoDB schemas
-│   ├── routes/        # API routes
-│   ├── public/        # Static media files
-│   ├── server.js      # Express server
-│   ├── seed.js        # Database seeding
-│   ├── .env           # Environment variables
+├── backend/                       # Express + MongoDB backend
+│   ├── assistant_service/        # Python AI assistant (Flask + FAISS)
+│   │   ├── .venv/               # Python virtual environment
+│   │   ├── src/                 # Python source code
+│   │   ├── data/                # Knowledge base JSON files
+│   │   ├── api_server.py        # Flask API server
+│   │   ├── requirements.txt     # Python dependencies
+│   │   └── README.md
+│   ├── models/                   # MongoDB schemas
+│   ├── routes/                   # API routes
+│   ├── public/                   # Static media files
+│   ├── server.js                 # Express server
+│   ├── seed.js                   # Database seeding
+│   ├── .env                      # Environment variables
 │   └── package.json
 │
-└── A-block/           # Source media files
+├── start-dev.ps1                 # Development startup script
+└── README.md
 ```
 
 ## 🚀 Quick Start
 
 ### Prerequisites
 - Node.js (v14 or higher)
+- Python 3.8+
 - MongoDB (running on localhost:27017)
 
 ### Installation
@@ -48,7 +57,15 @@ cd frontend
 npm install
 ```
 
-3. **Environment Configuration**
+3. **Python Assistant Setup**
+```powershell
+cd backend\assistant_service
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+```
+
+4. **Environment Configuration**
 The `.env` file in the backend folder should contain:
 ```
 MONGODB_URI=mongodb://localhost:27017/mahotsav-website
@@ -56,15 +73,26 @@ PORT=5000
 NODE_ENV=development
 ```
 
-4. **Seed Database**
-```bash
-cd backend
-npm run seed
-```
+5. **Database (Start Empty)**
+- The database is intended to start empty.
+- Only add admin credentials / blocks when you explicitly decide to.
+- (Optional) A seeding script exists in `backend/seed.js`, but do not run it unless you want sample data.
 
 ### Running the Application
 
-**Option 1: Run Separately (Recommended for Development)**
+**Option 1: Automated Startup (Recommended)**
+
+Windows PowerShell (from project root):
+```powershell
+.\start-dev.ps1
+```
+
+This will automatically start:
+- Backend Server (port 5000)
+- Python Assistant Service (port 5001)
+- Frontend Dev Server (port 3000)
+
+**Option 2: Run Manually**
 
 Terminal 1 - Backend:
 ```bash
@@ -72,31 +100,33 @@ cd backend
 npm run dev
 ```
 
-Terminal 2 - Frontend:
+Terminal 2 - Python Assistant:
+```powershell
+cd backend\assistant_service
+.\.venv\Scripts\Activate.ps1
+python api_server.py
+```
+
+Terminal 3 - Frontend:
 ```bash
 cd frontend
 npm run dev
-```
-
-**Option 2: Use the Helper Scripts**
-
-Windows PowerShell:
-```powershell
-.\start-dev.ps1
 ```
 
 ### Access the Application
 
 - **Frontend**: http://localhost:3000
 - **Backend API**: http://localhost:5000
+- **Assistant API**: http://localhost:5001
 - **Admin Login**: Click "Admin Login" button
-  - Username: `admin`
-  - Password: `admin123`
+  - Admin credentials are not created automatically.
 
 ## 🎯 Features
 
 ### User Features
 - Interactive campus map with clickable buildings
+- Animated robot avatar for AI assistant access
+- Voice-enabled AI assistant with multilingual support
 - Detailed block views with section navigation
 - Video tours of labs and classrooms
 - Responsive design
