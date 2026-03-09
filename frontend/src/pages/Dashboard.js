@@ -1,14 +1,22 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
+import { Plus, Save, X } from 'lucide-react';
+import { cacheRead, cacheReadNumber, cacheWrite } from '../utils/sessionCache';
+
+const CACHE_KEYS = {
+  blocks: 'dashboard.blocks.v1',
+  mapLastUpdated: 'dashboard.mapLastUpdated.v1'
+};
 
 function Dashboard() {
   const navigate = useNavigate();
-  const canvasRef = useRef(null);
+  const mapImageRef = useRef(null);
   const [user, setUser] = useState('');
-  const [blocks, setBlocks] = useState([]);
-  const [mode, setMode] = useState('view'); // 'view', 'draw', 'click'
+  const [blocks, setBlocks] = useState(() => cacheRead(CACHE_KEYS.blocks, []));
   const [selectedBlock, setSelectedBlock] = useState(null);
+  const [mapTimestamp, setMapTimestamp] = useState(() => cacheReadNumber(CACHE_KEYS.mapLastUpdated, 0));
+  const [, setLayoutTick] = useState(0);
   
   // Form state for new/edit block
   const [blockForm, setBlockForm] = useState({
@@ -18,13 +26,9 @@ function Dashboard() {
     sections: []
   });
   const [imageFile, setImageFile] = useState(null);
-  
-  // Drawing state
-  const [isDrawing, setIsDrawing] = useState(false);
-  const [startPoint, setStartPoint] = useState(null);
-  const [currentRect, setCurrentRect] = useState(null);
-  const [imageLoaded, setImageLoaded] = useState(false);
-  const [imageDimensions, setImageDimensions] = useState({ width: 0, height: 0 });
+
+  // Keep in sync with the <img> style below and Home page behavior
+  const MAP_OBJECT_FIT = 'cover';
 
   useEffect(() => {
     // Check if user is logged in
@@ -38,34 +42,40 @@ function Dashboard() {
     
     setUser(username);
     fetchBlocks();
+    checkMapUpdate();
   }, [navigate]);
 
-  // Redraw canvas when blocks change
   useEffect(() => {
-    if (imageLoaded && canvasRef.current && blocks.length > 0) {
-      const canvas = canvasRef.current;
-      const ctx = canvas.getContext('2d');
-      const img = document.getElementById('map-img');
-      
-      if (img && img.complete) {
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-        
-        blocks.forEach(block => {
-          if (block.coordinates) {
-            drawBlock(ctx, block, canvas.width, canvas.height);
-          }
-        });
-      }
-    }
-  }, [blocks, imageLoaded]);
+    const onResize = () => setLayoutTick((t) => t + 1);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
 
   const fetchBlocks = async () => {
     try {
       const response = await axios.get('/api/blocks');
-      setBlocks(response.data);
+      const nextBlocks = response.data?.value || response.data;
+      setBlocks(nextBlocks);
+      cacheWrite(CACHE_KEYS.blocks, nextBlocks);
     } catch (error) {
       console.error('Error fetching blocks:', error);
+    }
+  };
+
+  const checkMapUpdate = async () => {
+    try {
+      const response = await axios.get('/api/blocks/map-metadata');
+      const raw = response?.data?.lastUpdated;
+      const serverTimestamp = Math.trunc(Number(raw));
+      if (!Number.isFinite(serverTimestamp) || serverTimestamp <= 0) return;
+
+      setMapTimestamp((prev) => {
+        if (prev === serverTimestamp) return prev;
+        cacheWrite(CACHE_KEYS.mapLastUpdated, serverTimestamp);
+        return serverTimestamp;
+      });
+    } catch (error) {
+      console.error('Error checking map updates:', error);
     }
   };
 
@@ -75,150 +85,51 @@ function Dashboard() {
     navigate('/');
   };
 
-  const handleImageLoad = (e) => {
-    setImageLoaded(true);
-    const canvas = canvasRef.current;
-    const img = e.target;
-    
-    // Use natural dimensions of the image
-    const imgWidth = img.naturalWidth;
-    const imgHeight = img.naturalHeight;
-    
-    // Calculate display size (max 1200px wide while maintaining aspect ratio)
-    const maxWidth = 1200;
-    let displayWidth = imgWidth;
-    let displayHeight = imgHeight;
-    
-    if (imgWidth > maxWidth) {
-      displayWidth = maxWidth;
-      displayHeight = (imgHeight * maxWidth) / imgWidth;
-    }
-    
-    setImageDimensions({
-      width: displayWidth,
-      height: displayHeight
-    });
-    
-    if (canvas) {
-      canvas.width = displayWidth;
-      canvas.height = displayHeight;
-      
-      const ctx = canvas.getContext('2d');
-      ctx.drawImage(img, 0, 0, displayWidth, displayHeight);
-      
-      // Draw existing blocks on the canvas
-      blocks.forEach(block => {
-        if (block.coordinates) {
-          drawBlock(ctx, block, displayWidth, displayHeight);
-        }
-      });
-    }
+  const handleMapImageLoad = () => {
+    setLayoutTick((t) => t + 1);
   };
 
-  const getMousePos = (canvas, evt) => {
-    const rect = canvas.getBoundingClientRect();
-    return {
-      x: evt.clientX - rect.left,
-      y: evt.clientY - rect.top
+  const getActualImageBounds = () => {
+    if (!mapImageRef.current) return null;
+
+    const img = mapImageRef.current;
+    const containerWidth = img.offsetWidth;
+    const containerHeight = img.offsetHeight;
+    const imgNaturalWidth = img.naturalWidth;
+    const imgNaturalHeight = img.naturalHeight;
+
+    if (!containerWidth || !containerHeight || !imgNaturalWidth || !imgNaturalHeight) {
+      return null;
+    }
+
+    const scale = MAP_OBJECT_FIT === 'cover'
+      ? Math.max(containerWidth / imgNaturalWidth, containerHeight / imgNaturalHeight)
+      : Math.min(containerWidth / imgNaturalWidth, containerHeight / imgNaturalHeight);
+
+    const displayWidth = imgNaturalWidth * scale;
+    const displayHeight = imgNaturalHeight * scale;
+    const offsetX = (containerWidth - displayWidth) / 2;
+    const offsetY = (containerHeight - displayHeight) / 2;
+
+    return { displayWidth, displayHeight, offsetX, offsetY };
+  };
+
+  const percentToPixels = (coords) => {
+    const bounds = getActualImageBounds();
+    if (!bounds) return null;
+
+    const result = {
+      left: bounds.offsetX + (coords.x / 100) * bounds.displayWidth,
+      top: bounds.offsetY + (coords.y / 100) * bounds.displayHeight,
+      width: (coords.width / 100) * bounds.displayWidth,
+      height: (coords.height / 100) * bounds.displayHeight
     };
-  };
 
-  const handleCanvasMouseDown = (e) => {
-    if (mode !== 'draw') return;
-    
-    const canvas = canvasRef.current;
-    const pos = getMousePos(canvas, e);
-    
-    setIsDrawing(true);
-    setStartPoint(pos);
-  };
-
-  const handleCanvasMouseMove = (e) => {
-    if (!isDrawing || mode !== 'draw') return;
-    
-    const canvas = canvasRef.current;
-    const ctx = canvas.getContext('2d');
-    const pos = getMousePos(canvas, e);
-    
-    // Redraw image
-    const img = document.getElementById('map-img');
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-    
-    // Draw existing blocks
-    blocks.forEach(block => {
-      if (block.coordinates) {
-        drawBlock(ctx, block, canvas.width, canvas.height);
-      }
-    });
-    
-    // Draw current rectangle
-    const width = pos.x - startPoint.x;
-    const height = pos.y - startPoint.y;
-    
-    ctx.strokeStyle = '#ffc107';
-    ctx.lineWidth = 3;
-    ctx.strokeRect(startPoint.x, startPoint.y, width, height);
-    ctx.fillStyle = 'rgba(255, 193, 7, 0.2)';
-    ctx.fillRect(startPoint.x, startPoint.y, width, height);
-    
-    setCurrentRect({ x: startPoint.x, y: startPoint.y, width, height });
-  };
-
-  const handleCanvasMouseUp = (e) => {
-    if (!isDrawing || mode !== 'draw') return;
-    
-    setIsDrawing(false);
-    
-    if (currentRect && Math.abs(currentRect.width) > 10 && Math.abs(currentRect.height) > 10) {
-      // Convert to percentages
-      const x = (currentRect.x / imageDimensions.width) * 100;
-      const y = (currentRect.y / imageDimensions.height) * 100;
-      const width = (Math.abs(currentRect.width) / imageDimensions.width) * 100;
-      const height = (Math.abs(currentRect.height) / imageDimensions.height) * 100;
-      
-      setBlockForm({
-        ...blockForm,
-        coordinates: {
-          x: parseFloat(x.toFixed(2)),
-          y: parseFloat(y.toFixed(2)),
-          width: parseFloat(width.toFixed(2)),
-          height: parseFloat(height.toFixed(2))
-        }
-      });
-      
-      alert(`Coordinates captured!\nx: ${x.toFixed(2)}%, y: ${y.toFixed(2)}%\nwidth: ${width.toFixed(2)}%, height: ${height.toFixed(2)}%`);
+    if (![result.left, result.top, result.width, result.height].every(Number.isFinite)) {
+      return null;
     }
-  };
 
-  const handleCanvasClick = (e) => {
-    if (mode !== 'click') return;
-    
-    const canvas = canvasRef.current;
-    const pos = getMousePos(canvas, e);
-    
-    const x = (pos.x / imageDimensions.width) * 100;
-    const y = (pos.y / imageDimensions.height) * 100;
-    
-    console.log(`Clicked at: x=${x.toFixed(2)}%, y=${y.toFixed(2)}%`);
-    alert(`Coordinates: x=${x.toFixed(2)}%, y=${y.toFixed(2)}%`);
-  };
-
-  const drawBlock = (ctx, block, canvasWidth, canvasHeight) => {
-    const x = (block.coordinates.x / 100) * canvasWidth;
-    const y = (block.coordinates.y / 100) * canvasHeight;
-    const width = (block.coordinates.width / 100) * canvasWidth;
-    const height = (block.coordinates.height / 100) * canvasHeight;
-    
-    ctx.strokeStyle = '#667eea';
-    ctx.lineWidth = 2;
-    ctx.strokeRect(x, y, width, height);
-    ctx.fillStyle = 'rgba(102, 126, 234, 0.2)';
-    ctx.fillRect(x, y, width, height);
-    
-    ctx.fillStyle = '#fff';
-    ctx.font = 'bold 14px Arial';
-    ctx.fillText(block.displayName || block.name, x + 5, y + 20);
+    return result;
   };
 
   const handleFormChange = (e) => {
@@ -244,7 +155,7 @@ function Dashboard() {
   const addSection = () => {
     setBlockForm({
       ...blockForm,
-      sections: [...blockForm.sections, { name: '', displayName: '', video: '' }]
+      sections: [...blockForm.sections, { name: '', displayName: '', video: '', coordinates: null }]
     });
   };
 
@@ -255,17 +166,16 @@ function Dashboard() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    if (!selectedBlock) {
+      alert('Select an existing block to update (blocks/rectangles are created from Home → Edit Map).');
+      return;
+    }
     
     try {
       // Validate required fields
       if (!blockForm.name || blockForm.name.trim() === '') {
         alert('Block name is required!');
-        return;
-      }
-      
-      // Check if image is provided (either file upload or existing image)
-      if (!imageFile && !blockForm.image) {
-        alert('Please upload an image for the block!');
         return;
       }
       
@@ -279,19 +189,11 @@ function Dashboard() {
       // Add block data as JSON string
       formData.append('data', JSON.stringify(blockForm));
       
-      if (selectedBlock) {
-        // Update existing block
-        await axios.put(`/api/blocks/${selectedBlock._id}`, formData, {
-          headers: { 'Content-Type': 'multipart/form-data' }
-        });
-        alert('Block updated successfully!');
-      } else {
-        // Create new block
-        await axios.post('/api/blocks', formData, {
-          headers: { 'Content-Type': 'multipart/form-data' }
-        });
-        alert('Block created successfully!');
-      }
+      // Update existing block
+      await axios.put(`/api/blocks/${selectedBlock._id}`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+      alert('Block updated successfully!');
       
       fetchBlocks();
       resetForm();
@@ -333,100 +235,64 @@ function Dashboard() {
       sections: []
     });
     setSelectedBlock(null);
-    setCurrentRect(null);
     setImageFile(null);
-  };
-
-  const clearCanvas = () => {
-    if (!canvasRef.current || !imageLoaded) return;
-    
-    const canvas = canvasRef.current;
-    const ctx = canvas.getContext('2d');
-    const img = document.getElementById('map-img');
-    
-    if (!img) return;
-    
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-    
-    // Redraw existing blocks
-    blocks.forEach(block => {
-      if (block.coordinates) {
-        drawBlock(ctx, block, canvas.width, canvas.height);
-      }
-    });
-    
-    setCurrentRect(null);
   };
 
   return (
     <div className="dashboard-container">
-      <div className="dashboard-header">
-        <h1>🗺️ Admin Dashboard</h1>
-        <div className="header-actions">
-          <span className="user-info">👤 {user}</span>
-          <button onClick={handleLogout} className="logout-btn">Logout</button>
-        </div>
-      </div>
-
-      <div className="dashboard-content">
-        {/* Map Editor Section */}
-        <div className="map-editor-section">
-          <h2>Map Editor</h2>
-          
-          <div className="editor-controls">
-            <button 
-              className={`mode-btn ${mode === 'view' ? 'active' : ''}`}
-              onClick={() => setMode('view')}
-            >
-              👁️ View
-            </button>
-            <button 
-              className={`mode-btn ${mode === 'click' ? 'active' : ''}`}
-              onClick={() => setMode('click')}
-            >
-              👆 Click Point
-            </button>
-            <button 
-              className={`mode-btn ${mode === 'draw' ? 'active' : ''}`}
-              onClick={() => setMode('draw')}
-            >
-              ✏️ Draw Rectangle
-            </button>
-            <button onClick={clearCanvas} className="clear-btn">
-              🗑️ Clear
-            </button>
-          </div>
-
-          <div className="mode-indicator">
-            {mode === 'view' && '👁️ View Mode - Just viewing the map'}
-            {mode === 'click' && '👆 Click Mode - Click anywhere to get coordinates'}
-            {mode === 'draw' && '✏️ Draw Mode - Click and drag to draw a rectangle'}
-          </div>
-
-          <div className="canvas-wrapper">
-            <img 
-              id="map-img"
-              src="/public/map.jpeg" 
-              alt="Campus Map"
-              onLoad={handleImageLoad}
-              style={{ display: 'none' }}
-            />
-            <canvas
-              ref={canvasRef}
-              onMouseDown={handleCanvasMouseDown}
-              onMouseMove={handleCanvasMouseMove}
-              onMouseUp={handleCanvasMouseUp}
-              onClick={handleCanvasClick}
-              className="map-canvas"
-              style={{ cursor: mode === 'draw' ? 'crosshair' : mode === 'click' ? 'pointer' : 'default' }}
-            />
+      <div className="dashboard-card">
+        <div className="dashboard-header">
+          <h1>Admin Dashboard</h1>
+          <div className="header-actions">
+            <span className="user-info">👤 {user}</span>
+            <button onClick={handleLogout} className="logout-btn">Logout</button>
           </div>
         </div>
 
-        {/* Block Form Section */}
-        <div className="block-form-section">
-          <h2>{selectedBlock ? 'Edit Block' : 'Add New Block'}</h2>
+        <div className="dashboard-content">
+          {/* Map View Section (read-only) */}
+          <div className="map-editor-section">
+            <h2>Map (View Only)</h2>
+
+            <div className="mode-indicator">
+              View-only here. Create/position block rectangles from Home → Edit Map.
+            </div>
+
+            <div className="map-preview-shell">
+              <img
+                ref={mapImageRef}
+                src={mapTimestamp ? `/api/blocks/map-image?t=${mapTimestamp}` : '/api/blocks/map-image'}
+                alt="Campus Map"
+                className="map-preview-image"
+                style={{ objectFit: 'cover' }}
+                onLoad={handleMapImageLoad}
+              />
+
+              {blocks.map((block) => {
+                if (!block.coordinates) return null;
+                const pixelCoords = percentToPixels(block.coordinates);
+                if (!pixelCoords) return null;
+
+                return (
+                  <div
+                    key={block._id}
+                    className="map-preview-rect"
+                    style={{
+                      left: `${pixelCoords.left}px`,
+                      top: `${pixelCoords.top}px`,
+                      width: `${pixelCoords.width}px`,
+                      height: `${pixelCoords.height}px`
+                    }}
+                    title={block.displayName || block.name}
+                  />
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Block Form Section */}
+          <div className="block-form-section">
+          <h2>{selectedBlock ? 'Edit Block' : 'Select a Block to Edit'}</h2>
           
           <form onSubmit={handleSubmit} className="block-form">
             <input
@@ -435,8 +301,15 @@ function Dashboard() {
               placeholder="Block Name (e.g., A-Block)"
               value={blockForm.name}
               onChange={handleFormChange}
+              readOnly
               required
             />
+
+            {!selectedBlock && (
+              <div className="mode-indicator" style={{ marginTop: '12px' }}>
+                Blocks are created on the Home map. Use the list below, click “Edit”, then update image/sections here.
+              </div>
+            )}
             
             <div className="file-upload-section">
               <label htmlFor="image-upload">Block Image:</label>
@@ -445,7 +318,6 @@ function Dashboard() {
                 type="file"
                 accept="image/*"
                 onChange={handleFileChange}
-                required={!selectedBlock && !blockForm.image}
               />
               {blockForm.image && (
                 <div className="current-image">
@@ -455,53 +327,56 @@ function Dashboard() {
             </div>
             
             <div className="coordinates-group">
-              <h4>Coordinates (use Draw Rectangle tool above)</h4>
-              <div className="coord-inputs">
-                <input
-                  type="number"
-                  step="0.01"
-                  placeholder="X %"
-                  value={blockForm.coordinates.x}
-                  onChange={(e) => setBlockForm({
-                    ...blockForm,
-                    coordinates: { ...blockForm.coordinates, x: parseFloat(e.target.value) }
-                  })}
-                />
-                <input
-                  type="number"
-                  step="0.01"
-                  placeholder="Y %"
-                  value={blockForm.coordinates.y}
-                  onChange={(e) => setBlockForm({
-                    ...blockForm,
-                    coordinates: { ...blockForm.coordinates, y: parseFloat(e.target.value) }
-                  })}
-                />
-                <input
-                  type="number"
-                  step="0.01"
-                  placeholder="Width %"
-                  value={blockForm.coordinates.width}
-                  onChange={(e) => setBlockForm({
-                    ...blockForm,
-                    coordinates: { ...blockForm.coordinates, width: parseFloat(e.target.value) }
-                  })}
-                />
-                <input
-                  type="number"
-                  step="0.01"
-                  placeholder="Height %"
-                  value={blockForm.coordinates.height}
-                  onChange={(e) => setBlockForm({
-                    ...blockForm,
-                    coordinates: { ...blockForm.coordinates, height: parseFloat(e.target.value) }
-                  })}
-                />
+              <h4>Coordinates (managed from Home map)</h4>
+              <div style={{
+                padding: '10px 12px',
+                borderRadius: '10px',
+                border: '1px solid rgba(107, 114, 128, 0.3)',
+                background: 'rgba(248, 250, 252, 0.88)',
+                fontSize: '13px',
+                color: 'var(--text-strong)',
+                fontFamily: 'Monaco, monospace'
+              }}>
+                x={blockForm.coordinates?.x ?? 0}%, y={blockForm.coordinates?.y ?? 0}%, w={blockForm.coordinates?.width ?? 0}%, h={blockForm.coordinates?.height ?? 0}%
               </div>
             </div>
 
             <div className="sections-group">
               <h4>Sections (Labs, Classrooms, etc.)</h4>
+              <div className="video-link-help" style={{ 
+                marginBottom: '12px', 
+                padding: '12px', 
+                background: 'rgba(59, 130, 246, 0.1)', 
+                borderRadius: '8px',
+                fontSize: '13px',
+                lineHeight: '1.6'
+              }}>
+                <p style={{ margin: '0 0 8px 0', fontWeight: '600', color: 'var(--brand-blue)' }}>✓ Supported Video Links:</p>
+                <ul style={{ margin: '0 0 8px 0', paddingLeft: '20px' }}>
+                  <li><strong>YouTube:</strong> Share link or watch URL (e.g., https://youtu.be/... or https://youtube.com/watch?v=...)</li>
+                  <li><strong>Google Drive:</strong> Share link with "Anyone with the link can view" (e.g., https://drive.google.com/file/d/FILE_ID/view?usp=sharing)</li>
+                  <li><strong>Local Videos:</strong> Upload to backend/public/videos/ and use /public/videos/filename.mp4</li>
+                </ul>
+                <div style={{
+                  background: 'rgba(16, 185, 129, 0.08)',
+                  border: '1px solid rgba(16, 185, 129, 0.3)',
+                  padding: '10px 12px',
+                  borderRadius: '6px',
+                  marginBottom: '8px'
+                }}>
+                  <p style={{ margin: '0 0 6px 0', fontWeight: '600', color: '#047857', fontSize: '12px' }}>📹 How to use Google Drive videos:</p>
+                  <ol style={{ margin: '0', paddingLeft: '20px', fontSize: '12px', color: '#065f46' }}>
+                    <li>Upload your video to Google Drive</li>
+                    <li>Right-click → Share → Change to "Anyone with the link"</li>
+                    <li>Set permission to "Viewer"</li>
+                    <li>Copy the link and paste it in the "Video" field below</li>
+                    <li>Videos will automatically stream through the proxy!</li>
+                  </ol>
+                </div>
+                <p style={{ margin: '0', fontSize: '12px', color: 'var(--text-muted)' }}>
+                  ⚠️ <strong>Note:</strong> OneDrive links often don't work due to authentication. Use YouTube or Google Drive instead.
+                </p>
+              </div>
               {blockForm.sections.map((section, index) => (
                 <div key={index} className="section-row">
                   <input
@@ -518,35 +393,61 @@ function Dashboard() {
                   />
                   <input
                     type="text"
-                    placeholder="Video: Google/OneDrive link OR /public/videos/file.mp4"
+                    placeholder="Video: YouTube link, Google Drive link, or /public/videos/file.mp4"
                     value={section.video}
                     onChange={(e) => handleSectionChange(index, 'video', e.target.value)}
                   />
+                  {section.coordinates && (
+                    <div style={{
+                      gridColumn: '1 / -1',
+                      padding: '8px 12px',
+                      background: 'rgba(16, 185, 129, 0.08)',
+                      border: '1px solid rgba(16, 185, 129, 0.3)',
+                      borderRadius: '6px',
+                      fontSize: '12px',
+                      color: '#065f46',
+                      fontFamily: 'Monaco, monospace'
+                    }}>
+                      ✓ Position: x={section.coordinates.x}%, y={section.coordinates.y}%, w={section.coordinates.width}%, h={section.coordinates.height}%
+                    </div>
+                  )}
                   <button type="button" onClick={() => removeSection(index)} className="remove-btn">
                     ❌
                   </button>
                 </div>
               ))}
               <button type="button" onClick={addSection} className="add-section-btn">
-                ➕ Add Section
+                <Plus className="form-btn-icon" size={18} aria-hidden="true" />
+                <span>Add Section</span>
               </button>
             </div>
 
             <div className="form-actions">
               <button type="submit" className="submit-btn">
-                {selectedBlock ? '💾 Update Block' : '➕ Create Block'}
+                {selectedBlock ? (
+                  <>
+                    <Save className="form-btn-icon" size={18} aria-hidden="true" />
+                    <span>Update Block</span>
+                  </>
+                ) : (
+                  <>
+                    <Plus className="form-btn-icon" size={18} aria-hidden="true" />
+                    <span>Update Block</span>
+                  </>
+                )}
               </button>
               {selectedBlock && (
                 <button type="button" onClick={resetForm} className="cancel-btn">
-                  ❌ Cancel
+                  <X className="form-btn-icon" size={18} aria-hidden="true" />
+                  <span>Cancel</span>
                 </button>
               )}
             </div>
           </form>
         </div>
 
-        {/* Blocks List Section */}
-        <div className="blocks-list-section">
+          {/* Blocks List Section */}
+          <div className="blocks-list-section">
           <h2>Existing Blocks ({blocks.length})</h2>
           <div className="blocks-grid">
             {blocks.map((block) => (
@@ -565,6 +466,7 @@ function Dashboard() {
                 </div>
               </div>
             ))}
+          </div>
           </div>
         </div>
       </div>

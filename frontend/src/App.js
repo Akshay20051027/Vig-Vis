@@ -5,14 +5,16 @@ import BlockView from './pages/BlockView';
 import VideoPlayer from './pages/VideoPlayer';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
+import Assistant from './pages/Assistant';
 import './App.css';
 
 function App() {
   return (
-    <Router>
+    <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
       <div className="App">
         <Routes>
           <Route path="/" element={<Home />} />
+          <Route path="/assistant" element={<Assistant />} />
           <Route path="/login" element={<Login />} />
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/block/:blockName" element={<BlockView />} />

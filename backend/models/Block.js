@@ -12,12 +12,26 @@ const BlockSchema = new mongoose.Schema({
   },
   image: {
     type: String,
-    required: false // Will be set via file upload or can be provided
+    required: false // Legacy: file path for backward compatibility
+  },
+  imageData: {
+    type: String, // Base64 encoded image data
+    required: false
+  },
+  imageContentType: {
+    type: String, // MIME type (image/png, image/jpeg, etc.)
+    required: false
   },
   sections: [{
     name: String,
     displayName: String,
-    video: String
+    video: String,
+    coordinates: {
+      x: Number,
+      y: Number,
+      width: Number,
+      height: Number
+    }
   }],
   coordinates: {
     x: Number,
