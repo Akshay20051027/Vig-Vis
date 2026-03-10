@@ -31,6 +31,8 @@ function Home() {
     }
   });
   const [isAssistantModalOpen, setIsAssistantModalOpen] = useState(false);
+  const announcementPlayedRef = useRef(false);
+  const audioRef = useRef(null);
 
   const [imageBounds, setImageBounds] = useState(null);
   
@@ -78,6 +80,78 @@ function Home() {
     return () => {
       clearInterval(mapCheckInterval);
       document.removeEventListener('visibilitychange', onVisibility);
+    };
+  }, []);
+
+  // Voice announcement on page load
+  useEffect(() => {
+    if (!announcementPlayedRef.current) {
+      announcementPlayedRef.current = true;
+      
+      const announceMessage = async () => {
+        const messages = [
+          { text: 'Select block to view classrooms', code: 'en-IN' },
+          { text: 'తరగతి గదులను చూడటానికి బ్లాక్ ఎంచుకోండి', code: 'te-IN' },
+          { text: 'कक्षाएं देखने के लिए ब्लॉक चुनें', code: 'hi-IN' }
+        ];
+
+        for (const msg of messages) {
+          try {
+            const response = await fetch('/api/assistant/tts', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ text: msg.text, language: msg.code })
+            });
+            
+            if (response.ok) {
+              const blob = await response.blob();
+              const url = URL.createObjectURL(blob);
+              const audio = new Audio(url);
+              audioRef.current = audio;
+              
+              await new Promise((resolve) => {
+                audio.onended = () => {
+                  URL.revokeObjectURL(url);
+                  resolve();
+                };
+                audio.onerror = () => {
+                  URL.revokeObjectURL(url);
+                  resolve();
+                };
+                
+                audio.play().catch(() => resolve());
+              });
+              
+              // Wait 800ms before next language
+              await new Promise(resolve => setTimeout(resolve, 800));
+            }
+          } catch (error) {
+            console.error('TTS Error:', error);
+            // Fallback to browser TTS
+            if ('speechSynthesis' in window) {
+              const utterance = new SpeechSynthesisUtterance(msg.text);
+              utterance.lang = msg.code;
+              utterance.rate = 1.2;
+              window.speechSynthesis.speak(utterance);
+              
+              await new Promise(resolve => {
+                utterance.onend = () => resolve();
+                setTimeout(resolve, 3000);
+              });
+            }
+          }
+        }
+      };
+      
+      // Start announcement after a short delay
+      setTimeout(() => announceMessage(), 500);
+    }
+
+    return () => {
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current = null;
+      }
     };
   }, []);
 

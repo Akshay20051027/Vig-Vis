@@ -66,7 +66,7 @@ if (Test-PortListening -Port 3000) {
     Write-Host "✅ Frontend already running on http://localhost:3000" -ForegroundColor Green
 } else {
     Write-Host "Starting Frontend Server..." -ForegroundColor Green  
-    Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd '$PSScriptRoot\frontend'; npm run dev"
+    Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd '$PSScriptRoot\frontend-01'; npm run dev"
 }
 
 Write-Host ""

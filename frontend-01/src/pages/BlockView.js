@@ -47,7 +47,7 @@ function BlockView() {
           <div className="block-navbar__inner">
             <div className="block-navbar__left">
               <button type="button" className="block-nav-back" onClick={() => navigate('/home')}>
-                ←
+                <span className="block-nav-arrow">←</span> BLOCK PREVIEW
               </button>
             </div>
             <h1 className="block-navbar__title">Block</h1>
@@ -67,7 +67,7 @@ function BlockView() {
         <div className="block-navbar__inner">
           <div className="block-navbar__left">
             <button type="button" className="block-nav-back" onClick={() => navigate('/home')}>
-              ←
+              ← BLOCK PREVIEW
             </button>
           </div>
           <h1 className="block-navbar__title">{block.displayName}</h1>

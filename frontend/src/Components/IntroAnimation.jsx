@@ -2,6 +2,7 @@ import React, { useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Canvas, useFrame } from '@react-three/fiber';
 import { Sphere } from '@react-three/drei';
+import vignanLogo from '../assets/vignan-logo-source.png';
 
 function FloatingSpheres() {
   const group = useRef(null);
@@ -158,7 +159,7 @@ export default function IntroAnimation({ onComplete }) {
               }}
             >
               <img
-                src="/vignan-logo-source.png"
+                src={vignanLogo}
                 alt="Vignan University"
                 style={{
                   width: '100%',

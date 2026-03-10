@@ -1,66 +1,102 @@
-"""CLI entrypoint for the FAISS-based JSON RAG agent."""
+"""Main entry point for the Vignan RAG Voice/Text Assistant.
+
+Usage:
+    python run.py                           # Text mode, English
+    python run.py --voice                   # Voice mode, will ask language
+    python run.py --language hindi          # Text mode, Hindi
+    python run.py --voice --language telugu # Voice mode, Telugu
+"""
 
 import argparse
-from datetime import datetime
+import sys
 from pathlib import Path
 
-from src.query_engine import QueryEngine
+# Add project root to path
+sys.path.insert(0, str(Path(__file__).parent))
+
+from rag_engine.voice_assistant import VoiceAssistant
+from rag_engine.query_engine import QueryEngine
+from config import (
+    DATA_PATH, MODEL_NAME, TOP_K, SUPPORTED_LANGUAGES, DEFAULT_LANGUAGE
+)
 
 
-def build_engine(args: argparse.Namespace) -> QueryEngine:
-    engine = QueryEngine(model_name=args.model, top_k=args.top_k)
-    chunks = engine.ingest_json(args.json_path)
-    engine.index_chunks(chunks)
-    return engine
-
-
-def time_greeting(now: datetime | None = None) -> str:
-    now = now or datetime.now()
-    hour = now.hour
-    if 5 <= hour < 12:
-        greet = "Good morning"
-    elif 12 <= hour < 17:
-        greet = "Good afternoon"
-    elif 17 <= hour < 22:
-        greet = "Good evening"
-    else:
-        greet = "Hello"
-
-    extra = ""
-    if 12 <= hour < 16:
-        extra = " It's lunchtime; the boys hostel is serving lunch now."
-    return f"{greet}! The time is {now.strftime('%I:%M %p')}.{extra}"
-
-
-def interactive_loop(engine: QueryEngine) -> None:
-    print("RAG agent ready. Ask questions (type 'exit' to quit).")
-    while True:
-        try:
-            question = input("\nQuestion: ").strip()
-        except (KeyboardInterrupt, EOFError):
-            print("\nGoodbye!")
-            break
-        if question.lower() in {"exit", "quit"}:
-            print("Goodbye!")
-            break
-        if question.lower() in {"hi", "hello", "hey", "good morning", "good afternoon", "good evening"}:
-            print("\n" + time_greeting())
-            continue
-        if not question:
-            continue
-        answer = engine.ask(question)
-        print("\n" + answer)
-
-
-def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="FAISS-based RAG over JSON knowledge.")
-    parser.add_argument("--json-path", default=str(Path("data/vignan_university_dataset.json")), help="Path to knowledge JSON file.")
-    parser.add_argument("--model", default="all-MiniLM-L6-v2", help="SentenceTransformer model name.")
-    parser.add_argument("--top-k", type=int, default=3, help="Number of chunks to retrieve for each question.")
-    return parser.parse_args()
+def main():
+    """Run the Vignan RAG Voice/Text Assistant."""
+    parser = argparse.ArgumentParser(
+        description="Vignan RAG Voice/Text Assistant with Multilingual Support"
+    )
+    parser.add_argument(
+        "--voice",
+        action="store_true",
+        help="Start in voice mode (default: text mode)"
+    )
+    parser.add_argument(
+        "--language",
+        default=DEFAULT_LANGUAGE,
+        choices=list(SUPPORTED_LANGUAGES.keys()),
+        help=f"Language for speech and responses (default: {DEFAULT_LANGUAGE})"
+    )
+    parser.add_argument(
+        "--data",
+        default=DATA_PATH,
+        help="Path to knowledge JSON file"
+    )
+    parser.add_argument(
+        "--model",
+        default=MODEL_NAME,
+        help="SentenceTransformer model name"
+    )
+    parser.add_argument(
+        "--top-k",
+        type=int,
+        default=TOP_K,
+        help="Number of results to retrieve"
+    )
+    
+    args = parser.parse_args()
+    
+    # Validate data file exists
+    if not Path(args.data).exists():
+        print(f"❌ Error: Data file not found: {args.data}")
+        print(f"Please update DATA_PATH in config.py or provide --data argument")
+        sys.exit(1)
+    
+    # Initialize RAG engine
+    print("="*60)
+    print("🚀 Initializing Vignan RAG Agent...")
+    print("="*60)
+    print(f"📁 Data: {args.data}")
+    print(f"🤖 Model: {args.model}")
+    print(f"🔍 Top-K: {args.top_k}")
+    print(f"🌐 Language: {SUPPORTED_LANGUAGES[args.language]['name']}")
+    print("="*60)
+    print("\n⏳ Loading knowledge base...")
+    
+    try:
+        engine = QueryEngine(model_name=args.model, top_k=args.top_k)
+        chunks = engine.ingest_json(args.data)
+        engine.index_chunks(chunks)
+        print(f"✅ Loaded {len(chunks)} knowledge chunks successfully!\n")
+    except Exception as e:
+        print(f"❌ Error loading knowledge base: {e}")
+        sys.exit(1)
+    
+    # Start voice assistant
+    try:
+        assistant = VoiceAssistant(
+            rag_engine=engine,
+            use_voice=args.voice,
+            language=args.language
+        )
+        assistant.run()
+    except KeyboardInterrupt:
+        print("\n\n👋 Goodbye!")
+        sys.exit(0)
+    except Exception as e:
+        print(f"\n❌ Error: {e}")
+        sys.exit(1)
 
 
 if __name__ == "__main__":
-    args = parse_args()
-    engine = build_engine(args)
-    interactive_loop(engine)
+    main()

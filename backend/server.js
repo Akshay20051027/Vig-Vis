@@ -77,6 +77,7 @@ if (!process.env.MONGODB_URI) {
 app.use('/api/blocks', require('./routes/blocks'));
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/video-proxy', require('./routes/video-proxy'));
+app.use('/api/assistant', require('./routes/assistant'));
 
 // Serve React app in production
 if (process.env.NODE_ENV === 'production') {

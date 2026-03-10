@@ -1,0 +1,220 @@
+.assistant-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  padding: 20px;
+  animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.assistant-modal-content {
+  background: linear-gradient(to bottom, #ffffff 0%, #f8fafc 100%);
+  border-radius: 20px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  width: 100%;
+  max-width: 600px;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  animation: slideUp 0.3s ease;
+}
+
+@keyframes slideUp {
+  from {
+    transform: translateY(30px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.assistant-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 24px;
+  border-bottom: 1px solid rgba(30, 58, 138, 0.1);
+}
+
+.assistant-modal-header h1 {
+  margin: 0;
+  color: #1e3a8a;
+  font-size: 1.5rem;
+  font-weight: 700;
+}
+
+.assistant-close-btn {
+  background: rgba(239, 68, 68, 0.1);
+  border: none;
+  color: #dc2626;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 1.4rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.assistant-close-btn:hover {
+  background: rgba(239, 68, 68, 0.2);
+  transform: scale(1.1);
+}
+
+.assistant-modal-body {
+  padding: 24px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.assistant-state {
+  animation: contentFadeIn 0.4s ease;
+}
+
+@keyframes contentFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.assistant-state p {
+  margin-top: 0;
+  margin-bottom: 16px;
+  color: #1f2937;
+  font-weight: 600;
+  font-size: 1.1rem;
+}
+
+.assistant-grid2 {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.assistant-language-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.assistant-state button,
+.assistant-text-form button {
+  border: 1px solid rgba(30, 58, 138, 0.2);
+  border-radius: 12px;
+  background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+  color: #fff;
+  padding: 12px 16px;
+  font-weight: 600;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.assistant-state button:hover,
+.assistant-text-form button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
+}
+
+.assistant-state button:active,
+.assistant-text-form button:active {
+  transform: translateY(0);
+}
+
+.assistant-state button:disabled,
+.assistant-text-form button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.assistant-state .assistant-secondary {
+  margin-top: 10px;
+  width: 100%;
+  background: #f1f5f9;
+  color: #1f2937;
+}
+
+.assistant-text-form {
+  display: grid;
+  gap: 12px;
+}
+
+.assistant-text-form textarea {
+  border-radius: 12px;
+  border: 1px solid rgba(30, 58, 138, 0.2);
+  padding: 14px;
+  font-size: 1rem;
+  font-family: inherit;
+  resize: vertical;
+  transition: border-color 0.2s ease;
+}
+
+.assistant-text-form textarea:focus {
+  outline: none;
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+.assistant-question-preview {
+  margin: 12px 0;
+  padding: 12px;
+  border-radius: 12px;
+  background: rgba(30, 58, 138, 0.08);
+  color: #1e293b;
+  font-style: italic;
+}
+
+.assistant-answer {
+  white-space: pre-wrap;
+  line-height: 1.6;
+  margin: 14px 0;
+  padding: 16px;
+  border-radius: 12px;
+  background: rgba(20, 184, 166, 0.1);
+  color: #0f172a;
+  border-left: 4px solid #14b8a6;
+}
+
+@media (max-width: 768px) {
+  .assistant-modal-content {
+    max-width: 95%;
+    max-height: 90vh;
+  }
+
+  .assistant-modal-header h1 {
+    font-size: 1.25rem;
+  }
+
+  .assistant-grid2,
+  .assistant-language-grid {
+    grid-template-columns: 1fr;
+  }
+}

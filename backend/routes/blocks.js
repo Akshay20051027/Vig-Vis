@@ -32,16 +32,6 @@ const FALLBACK_MAP_PATHS = [
   path.join(__dirname, '..', 'public', 'map.png'),
   path.join(__dirname, '..', 'public', 'map.jpg'),
   path.join(__dirname, '..', 'public', 'map.jpeg'),
-  // Legacy fallback
-  path.join(
-    __dirname,
-    '..',
-    'legacy',
-    'Vignan-Visit-Akshay',
-    'mahotsav-website',
-    'public',
-    'map.jpeg'
-  )
 ];
 
 const FALLBACK_BLOCKS = [
